@@ -1,0 +1,223 @@
+# Zuur, Appendix
+
+Load useful Zuur functions.
+
+```{r}
+source("R/HighstatLibV10.R")
+```
+
+### Data
+
+Load the data and turn the numical GRAZE variable into a factor.
+
+```{r}
+Loyn <- read.delim("data/Loyn.txt", header = TRUE)
+Loyn$fGRAZE <- factor(Loyn$GRAZE)
+```
+
+### Step 1: Outliers
+
+Two methods here:
+
+*Cleveland dotplots*
+
+```{r}
+op <- par(mfrow = c(4, 2), mar = c(3, 3, 3, 1))
+
+dotchart(Loyn$ABUND, main = "ABUND", group = Loyn$fGRAZE)
+plot(0, 0, type = "n", axes = FALSE)
+dotchart(Loyn$AREA, main = "AREA", group = Loyn$fGRAZE)
+dotchart(Loyn$DIST, main = "DIST", group = Loyn$fGRAZE)
+dotchart(Loyn$LDIST, main = "LDIST", group = Loyn$fGRAZE)
+dotchart(Loyn$YR.ISOL, main = "YR.ISOL", group = Loyn$fGRAZE) 
+dotchart(Loyn$ALT, main = "ALT", group = Loyn$fGRAZE)
+dotchart(Loyn$GRAZE, main = "GRAZE", group = Loyn$fGRAZE)
+
+par(op)
+```
+
+*Boxplots*
+
+```{r}
+op <- par(mfrow = c(4, 2), mar = c(3, 3, 3, 1))
+
+boxplot(ABUND ~ fGRAZE, data=Loyn, main = "ABUND")
+plot(0, 0, type = "n", axes = FALSE)
+boxplot(AREA ~ fGRAZE, data=Loyn, main = "AREA")
+boxplot(DIST ~ fGRAZE, data=Loyn, main = "DIST")
+boxplot(LDIST ~ fGRAZE, data=Loyn, main = "LDIST")
+boxplot(YR.ISOL ~ fGRAZE, data=Loyn, main = "YR.ISOL")
+boxplot(ALT ~ fGRAZE, data=Loyn, main = "ALT")
+boxplot(GRAZE ~ fGRAZE, data=Loyn, main = "GRAZE")
+
+par(op)
+```
+
+Conclusion, log-transformations needed:
+
+```{r}
+Loyn$L.AREA <- log10(Loyn$AREA) 
+Loyn$L.DIST <- log10(Loyn$DIST) 
+Loyn$L.LDIST <- log10(Loyn$LDIST)
+```
+
+### Step 2: Collinearity
+
+*Pairwise scatterplots and correlation coefficients*
+
+```{r}
+Z <- cbind(Loyn$ABUND, Loyn$L.AREA, Loyn$L.DIST, Loyn$L.LDIST, Loyn$YR.ISOL, Loyn$ALT, Loyn$GRAZE)
+colnames(Z) <- c("ABUND", "L.AREA", "L.DIST", "L.LDIST", "YR.ISOL", "ALT", "GRAZE")
+
+pairs(Z, lower.panel = panel.smooth2, upper.panel = panel.cor, diag.panel = panel.hist)
+```
+
+Notes:  
+
+- Shouldn't include categorical variables, but okay in this case, because GRAZE is ordinal
+- Don't get hung up on normality of explanatory variables; ALT example. GRAZE example.
+- Correlation? L.DIST and L.LDIST; GRAZE and L.AREA; and GRAZE and YR.ISOL. 
+- However, the value of 0.6 (and –0.6) is not large enough to worry us.
+
+*Variance inflation factors (VIF)*
+
+```{r}
+corvif(Z[, c(-1,-7)])
+```
+
+Notes: 
+
+- All VIF values are below 3 (see Chapter 26 in Zuur et al. (2007)), indicating there is no collinearity in these variables (at least not without GRAZE). We decided to keep all variables in the analysis.
+
+*Relationships*
+
+L.AREA and GRAZE will play important role from pairplot.
+
+### Linear regression
+
+Notes:
+
+- Interactions possible, but a small dataset.
+- Especially problematic with nominal variables, potentially containing few observations and so become influential
+
+*Interactions:*
+
+1. *Start with a model with no interactions. Apply the model, model selection, and model validation. If the validation shows that there are patterns in the residuals, investigate why. Adding interactions may be an option to improve the model.
+2. *Use biological knowledge to decide which, if any, interactions are sensible to add.
+3. *Apply a good data exploration to see which interactions may be important.
+4. Identify the prime explanatory variable(s) of interest. In the bird example, this would be GRAZE and AREA as we can control them using management decisions. Include interactions between these variables and any of the other variables.
+5. Only include the main terms and two-way interaction terms.
+6. Only include higher interactions terms if you have good reasons (i.e. biological justification) to do so.
+7. Include all interactions by default.
+
+```{r}
+M1 <- lm(ABUND ~ L.AREA + L.DIST + L.LDIST + YR.ISOL + ALT + fGRAZE, data = Loyn)
+```
+
+- Should we look at the numerical output first or the graphical output? 
+- There is no point in applying a detailed model validation if nothing is significant. 
+- On the other hand, why look at the numerical output if all the assumptions are violated? 
+- Perhaps starting with the numerical output is better as it takes less time and is easier. 
+
+```{r}
+summary(M1)
+drop1(M1, test="F") 
+anova(M1)
+```
+
+Anova can be used to compare nested models. M2 below is nested because it's a special case of M1, in that the GRAZE parameters are equal to zero (i.e., not included).
+
+```{r}
+M2 <- lm(ABUND ~ L.AREA + L.DIST + L.LDIST + YR.ISOL + ALT, data = Loyn)
+anova(M1, M2)
+```
+
+
+### Model selection
+
+If the aim of the analysis is to understand which explanatory variables are driving bird abundances, then we could decide to drop explanatory variables that are not significant. Note this is again a subject that statisticians disagree about. There are basically three main approaches:
+
+1. Drop individual explanatory variables one by one based on hypothesis testing procedures.
+2. Drop individual explanatory variables one by one (and each time refit the model) and use a model selection criteria like the AIC or BIC to decide on the optimal model.
+3. Specify a priori chosen models, and compare these models with each other. This approach is further discussed in Appendix A.6.
+
+```{r}
+step(M1)
+```
+
+*Interaction?*
+
+```{r}
+M3 <- lm(ABUND ~ L.AREA * fGRAZE, data = Loyn)
+summary(M3)
+drop1(M3, test="F") 
+anova(M3)
+```
+
+### Model validation
+
+
+- Plot (standardised) residuals against fitted values to assess homogeneity.
+- Make a histogram of the residuals to verify normality. You can also use a QQ-plot.
+- Plot the residuals against each explanatory variable that was used in the model. If you see a pattern, you are violating the independence assumption.
+- Plot the residuals against each explanatory variable not used in the model. If you see a pattern, include the omitted explanatory variable and refit the model. If the residuals patterns disappear, include the term, even if it is not significant.
+- Assess the model for influential observations. A useful tool is the Cook distance function.
+
+```{r}
+
+M3 <- lm(ABUND ~ L.AREA + fGRAZE, data = Loyn) 
+op <- par(mfrow = c(2, 2))
+
+plot(M3) #standard graphical output
+
+op <- par(mfrow = c(2, 2))
+
+#Check for normality 
+E <- rstandard(M3) 
+hist(E)
+
+qqnorm(E)
+
+#Check for independence and homogeneity: residuals 
+#versus individual explanatory variables
+
+plot(y = E, x = Loyn$L.AREA, xlab = "AREA",
+ylab = "Residuals") 
+abline(0, 0)
+plot(E ~ Loyn$fGRAZE, xlab = "GRAZE", ylab = "Residuals")
+abline(0, 0)
+
+par(op)
+
+```
+
+### Model interpretation
+
+```{r}
+plot(Loyn$L.AREA,Loyn$ABUND)
+D1 <- data.frame(L.AREA = Loyn$L.AREA[Loyn$GRAZE==1], fGRAZE = "1")
+D2 <- data.frame(L.AREA = Loyn$L.AREA[Loyn$GRAZE==2], fGRAZE = "2")
+D3 <- data.frame(L.AREA = Loyn$L.AREA[Loyn$GRAZE==3], fGRAZE = "3")
+D4 <- data.frame(L.AREA = Loyn$L.AREA[Loyn$GRAZE==4], fGRAZE = "4")
+D5 <- data.frame(L.AREA = Loyn$L.AREA[Loyn$GRAZE==5], fGRAZE = "5")
+
+
+P1 <- predict(M3, newdata = D1) 
+P2 <- predict(M3, newdata = D2) 
+P3 <- predict(M3, newdata = D3) 
+P4 <- predict(M3, newdata = D4) 
+P5 <- predict(M3, newdata = D5)
+
+lines(D1$L.AREA, P1, lty = 1) 
+lines(D2$L.AREA, P2, lty = 2) 
+lines(D3$L.AREA, P3, lty = 3) 
+lines(D4$L.AREA, P4, lty = 4) 
+lines(D5$L.AREA, P5, lty = 5)
+
+```
+
+# Stopped at additive modeling
+
+---
+
+
