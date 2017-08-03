@@ -1,3 +1,4 @@
 # Zuur book lab group discussion
 
-Note to go here....
+- Week 1: Josh, Appendix
+- Week 2: Kyle, Chapter 2

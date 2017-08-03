@@ -4,3 +4,6 @@ doc/
 .DS_Store
 .Rproj.user
 *.html
+.RData
+.Rhistory
+
