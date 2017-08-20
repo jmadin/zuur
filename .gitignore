@@ -1,6 +1,7 @@
 # Ignore
 
-doc/
+doc/chapters/
+doc/chapters.zip
 .DS_Store
 .Rproj.user
 *.html
