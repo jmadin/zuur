@@ -1,0 +1,493 @@
+---
+title: "Chapter4"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Zuur Chapter 4 - Heterogeneity
+
+Fixed term and a random term. The fixed term describes the response varable Y as a funcation of the explanatory variable, while the random part allows for heterogeneity
+- Linear regression - where the random part only contains the real random term
+- Mixed effects models - aloows for nested data
+- GLS or Generalised least squares - only allows for heterogeneity or a weighted linear regression
+
+##Linear Regression Applied on Squid
+The easiest way to over come heterogeneity is to transform your data but this removes interesting ecological information so Zuur suggests not thorwing away data because it is statitistically inconvienient 
+
+```{r}
+Squid$fMONTH <- factor(Squid$MONTH)
+```
+
+##4.1 DEALING WITH HETEROGENEITY
+
+```{r }
+M1 <- lm(Testisweight ∼ DML * fMONTH, data = Squid)
+
+
+op <- par(mfrow = c(2, 2), mar = c(4, 4, 2, 2))
+
+plot(M1, which = c(1), col = 1, add.smooth = FALSE,
+       caption = "")
+
+plot(Squid$fMONTH, resid(M1), xlab = "Month",
+       ylab = "Residuals")
+
+plot(Squid$DML, resid(M1), xlab = "DML",
+       ylab = "Residuals")
+
+par(op)
+
+```
+
+
+While the model output shows that the regression paramaters are significant we can't trust these results as the results violate the homogenatity assumtption (panel A) as the residals are not normally distributed. But there is a clear pattern we can see where the larger the doral mantle length the larger the variation. So we can say that variance increases with DML increases - we can try and fix this without transforming ouur data!
+
+We will slowly work through each of the problems in our panels 
+
+
+## THE FIXED VARIANCE STRUCTURE
+So we can fix our problem of heterogentity by fitting a generalised least squares using the gls function 
+
+
+```{r }
+
+library(nlme)
+
+M.lm <- gls(Testisweight ∼ DML * fMONTH, data=Squid)
+
+vf1Fixed <- varFixed(∼DML)
+
+M.gls1 <- gls(Testisweight ∼ DML * fMONTH,
+                weights = vf1Fixed, data = Squid)
+
+anova(M.lm, M.gls1)
+```
+
+
+varFixd(~DML) ensure a variance that is porportional to the DML
+RESULTS - show that the AIC favours the model with fixed variance - but we still have the problem of variance 
+
+##THE VarIdent VARIANCE STRUCTURE
+We now have the problem that spread also differes per month so we need to try adn incorporate this into the model - by allowing each month to have a different variance and compare this to our first anova 
+
+
+```{r }
+vf2 <- varIdent(form= ∼ 1 | fMONTH)
+
+M.gls2 <- gls(Testisweight ∼ DML*fMONTH, data =Squid,
+                weights = vf2)
+anova(M.lm, M.gls1, M.gls2)
+```
+
+
+By adding in the variance per month we have again reduced our AIC but we have added 11 more paramaters to the model
+
+We can compare our first model M.lm with our third model M.gls2 and see that the later is better - variances are not the same
+
+So which is better?? different spread per month OR different spread along dorsal mantle length?
+
+Lets plot out residules against our fitted values but colour code them with the months and see if any patterns emerge 
+
+
+
+
+```{r }
+plot(M.lm,which = c(1), col = Squid$MONTH,
+     add.smooth = FALSE, caption = "")
+
+```
+
+
+No clear pattern ... As there is no clear pattern lets plot the residuals versus the DML based on the month (12 months)
+
+```{r }
+E <- resid(M.lm)
+coplot(E ∼ DML | fMONTH, data = Squid)
+
+```
+
+
+We can see that the residual variation differs per month and in some months it increases for larger dorsal mantle length (3, 9 and 10)
+
+Therefore both are influencial - month AND length. BUT before we try and incorporate both of these lets explore a few more variance structures
+
+
+TIP - The easiest way to compare between the following variance structures is using the AIC
+
+
+##THE varPower VARIANCE STRUCTURE - The power of the covariate
+Here the variance of the residuals is modelled as the variance of the population and multipled with the power of the absolute vale of the variance covariate DML
+
+
+```{r }
+vf3 <- varPower(form =∼ DML)
+
+M.gls3 <- gls(Testisweight ∼ DML * fMONTH,
+                weights = vf3, data = Squid)
+
+summary(M.gls3)
+
+```
+
+
+AIC = 3473.019 - which is the lowest so far
+
+We can now model an increase in spread for larger DML values but only in certain months 
+
+
+```{r }
+vf4 <- varPower(form =∼ DML | fMONTH)
+
+M.gls4 <- gls(Testisweight ∼ DML * fMONTH,
+                data = Squid, weights = vf4)
+
+anova(M.lm, M.gls1, M.gls2, M.gls3, M.gls4)
+
+```
+
+
+##THE varEXP VARIANCE STRUCTURE - If the variance covariate can take the value of zero, the exponential variance structure is a better option. We can model the variance of the residuals as the variance of the population multiplied by an exponential function of the variance covariate DML and an unknown paramater. 
+
+using this function we account for variation in the DML per month 
+
+```{r }
+vf5 <- varExp(form =∼ DML)
+
+M.gls5 <- gls(Testisweight ∼ DML * fMONTH,
+                weights = vf5, data = Squid)
+
+anova(M.lm, M.gls1, M.gls2, M.gls3, M.gls4, M.gls5)
+
+```
+
+
+
+##the varConstPower VARIANCE STRUCTURE - the constant plus power of the variance covariate function. This variance structure works better than the varExp if the variance covariate has values close to zero.
+We can also allow for Month using this function
+
+```{r }
+vf7 <- varConstPower(form =∼ DML | fMONTH)
+
+M.gls7 <- gls(Testisweight ∼ DML * fMONTH,
+                weights = vf7, data = Squid)
+
+anova(M.lm, M.gls1, M.gls2, M.gls3, M.gls4, M.gls5, M.gls7)
+
+```
+The AIC is again lower in this model at 3431.51
+
+
+##The varComb VARIANCE STRUCTURE - With this variance structure, we can allow for both an increase in residual spread for larger DML values as well as a different spread per month. Here we combine varIdent and varExp
+
+```{r }
+vf8 <- varComb(varIdent(form =∼ 1 | fMONTH) ,
+               varExp(form =∼ DML) )
+M.gls8 <- gls(Testisweight ∼ DML * fMONTH,
+                weights = vf8, data = Squid)
+
+anova(M.lm, M.gls1, M.gls2, M.gls3, M.gls4,
+        M.gls5, M.gls7, M.gls8)
+
+AIC(M.lm, M.gls1, M.gls2, M.gls3, M.gls4, M.gls5, M.gls7, M.gls8)
+
+```
+
+
+Ok so now we have looked at 6 different types of Variance analyses - But how do we choose just one? and the right one??
+
+- If the variance covariate is a nominal variable - varIdent
+
+- varFixed can be quite limiting and can only be used where values will be positive (greater than 0)
+
+- Zuur suggests using varConst, varPower and varExp that allow for more flexibility and using trial and error to determine the best choice by comparig AIC values 
+
+
+So which model?? Model 4
+
+
+Now that we have chosen our potential model  we can graphically validate our choice using two types of residules - residuals calculated as observed minus fitted values (also called ordinary residuals) and normalised residuals.
+
+```{r }
+E1 <- resid(M.gls4)
+
+coplot(E1 ∼ DML | fMONTH,
+         ylab = "Ordinary residuals", data = Squid)
+
+```
+
+
+We want to standadise out residuals instead of using the ordinary residuals for model validation 
+```{r }
+E2 <- resid(M.gls4, type = "normalized")
+
+coplot(E2 ∼ DML | fMONTH, data = Squid,
+         ylab = "Normalised residuals")
+
+```
+
+
+
+##4.2 BENTHIC BIODIVERISTY EXPERIMENT - Linear Regression Applied on the Benthic Biodiveristy Data
+
+Comparing ammonium, nitrate and phosphite in algae enriched and non-enriched sediments 
+
+Data
+```{r }
+data(Biodiversity)
+
+Biodiv <- Biodiversity
+Biodiv$fTreatment <- factor(Biodiv$Treatment)
+Biodiv$fNutrient <- factor(Biodiv$Nutrient)
+
+boxplot(Concentration ∼ fTreatment * fNutrient, data = Biodiv)
+
+```
+
+
+We can see big variations in the alage enriched with ammonium - higher concentartions and more variation 
+
+```{r }
+M0 <- lm(Concentration ∼
+           Biomass * fTreatment * fNutrient,
+           data = Biodiv)
+
+plot(M0, which = c(1), add.smooth = FALSE)
+
+```
+
+
+Violation of homogeneity 
+Instead of a data transformation we will try to use a GLS to allow for different variances 
+
+##GLS
+First we must explore why there is heterogeneity 
+```{r }
+library(nlme)
+f1 <- formula(Concentration ∼ Biomass * fTreatment * fNutrient)
+
+```
+
+
+Linear regression model without any variance covariates 
+```{r }
+M0 <- gls(f1, data = Biodiv)
+
+```
+
+Treatment and nutrient
+```{r }
+M1A <-gls(f1, data = Biodiv, weights = varIdent(form =∼ 1 | fTreatment * fNutrient))
+
+```
+
+Just nutrient
+```{r }
+M1B <-gls(f1, data = Biodiv, weights = varIdent(form =∼ 1 | fNutrient))
+
+```
+
+Just treatment 
+```{r }
+M1C <-gls(f1, data = Biodiv, weights = varIdent(form =∼ 1 | fTreatment))
+
+anova(M0, M1A, M1B, M1C)
+
+```
+
+
+Comapre AIC's - best is model M1A which includes both treatment and nutrient
+```{r }
+anova(M1A)
+
+plot(M1A)
+
+```
+This plot shows the standardised residuals versus fitted values -  with no heterogeneity
+
+
+
+##A PROTOCOL - for model selection
+
+1. Start with a linear regression that contains as many explantory variable as possible as their interactions. Check if the homogeneity assumptions are valid by plotting the standardised residuals versus fitted values and by plotting the standardised residuals versus each individual explanatory variable.
+
+If there are no violation of homogenatity then you can continue with your analysis as normal - but if there is move to step 2. 
+
+2. For formal model comparison, repeat step 1 using the gls function - you can compare objects obtained by the gls using as anova
+
+3. Based on the graphical model validation in step 1 choose an appropriate variance structure - varConst, varPower and varExp, varIdent, varFixed 
+
+4. Fit a new gls model with the selected variance covariance structure selected in step 3. Ensure that REML estimation is used, which is done with gls(. . ., method = "REML"), and that you use the same selection of explanatory variables. This is now called the fixed part of the model, and the residuals are called the random part. We will first try to find the optimal random structure using as many explanatory variables in the fixed part as possible
+
+5. Compare the new GLS model with the earlier results using the AIC, BIC, or likelihood ratio test. If the new model is better, extract the normalised residuals, and inspect them for homogeneity. If they are homogenous move to step 6
+
+  If they are not go back to step 3 and 4 and choose another variance structure- if you can still not find the right variance structure you can add a different distribution (Poisson or negative binomial). IF after all of this you still can't make it work then consider transforming your data. 
+
+6. YAY you are half way!! You have found the optimal residual variance structure using REML estimation. Now to find the optimal fixed cmponent - which explanatory variables are significant. To do this you can compare the t-statistics, F-statistics or the likelihood ratio test. 
+
+7. Basically just add all terms and remove each using the model selection examples in step 6 until all terms are significant. 
+
+8. Apply a graphical model validation checking for homogeneity, normality and independance - if some problems arise consider re-adding non signifcant terms back into your model and see if this improves your validation graphs. 
+
+9. And no you are FINISHED!!
+
+
+
+We will now practise these steps using the benthic biodiveristy data
+
+##4.3 BENTHIC BIODIVERISTY EXPERIMENT
+
+```{r }
+anova(M1A)
+
+```
+
+Because we are comparing factors using an anova the ordering of the factors will affact whether they are significant or not - 
+
+
+
+```{r }
+M2A1 <- gls(Concentration ∼ Biomass + fTreatment +
+fNutrient +
+Biomass:fTreatment +
+Biomass:fNutrient +
+fTreatment:fNutrient +
+Biomass:fTreatment:fNutrient,
+weights = varIdent(form =∼ 1 |
+fTreatment * fNutrient),
+method = "ML", data = Biodiv)
+
+M2A2 <- gls(Concentration ∼ Biomass + fTreatment +
+Nutrient +
+Biomass:fTreatment +
+Biomass:fNutrient +
+fTreatment:fNutrient,
+weights=varIdent(form =∼ 1 |
+fTreatment * fNutrient),
+method = "ML", data = Biodiv)
+
+
+
+anova(M2A1, M2A2)
+
+```
+
+
+We will now complete a Backwards Selection - is is very time consuming and Zuur suggests only doing this if you have few variables but that it is good to see it once. So here we go....
+
+The following code drops each two-way interaction and applies a likelihood ratio test
+
+```{r }
+vfOptim <- varIdent(form =∼ 1 | fTreatment*fNutrient)
+
+#Assess significance of all 3 2-way interactions
+#Full model
+M3.Full <- gls(Concentration ∼ Biomass + fTreatment + fNutrient + Biomass:fTreatment + Biomass:fNutrient + fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
+
+
+#Drop Biomass:fTreatment
+M3.Drop1 <- gls(Concentration ∼ Biomass + fTreatment + fNutrient + Biomass:fNutrient + fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
+
+anova(M3.Full, M3.Drop1)
+
+#Drop Biomass:fNutrient
+M3.Drop2 <- gls(Concentration ∼ Biomass + fTreatment + fNutrient + Biomass:fTreatment + fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
+
+anova(M3.Full, M3.Drop2)
+
+
+#Drop fTreatment:fNutrient
+M3.Drop3 <- gls(Concentration ∼ Biomass + fTreatment + fNutrient +
+Biomass:fTreatment + Biomass:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
+
+anova(M3.Full, M3.Drop3)
+
+```
+
+
+So, we dropped each two-way interaction term in turn, applied the likelihood
+ratio test, and obtained p-values. Clearly, the two way interaction term Biomass:fTreatment is not significant at the 5% level and should be dropped.
+
+
+From the first model we can drop two of the teo-way interaction terms but no main terms can be dropped yet. 
+```{r }
+M4.Full <- gls(Concentration∼ Biomass + fTreatment + fNutrient + Biomass:fNutrient + fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
+
+#Drop Biomass:fNutrient
+M4.Drop1 <- update(M4.Full, .∼. -Biomass:fNutrient)
+
+anova(M4.Full, M4.Drop1)
+
+#Drop fTreatment:fNutrient
+M4.Drop2<-update(M4.Full, .∼. -fTreatment:fNutrient)
+
+anova(M4.Full, M4.Drop2)
+
+```
+
+They decied to drop the Biomass:fNutrient interaction as a p value of 0.04 is not very impressive. 
+
+```{r }
+#New full model
+M5.Full <- gls(Concentration ∼ Biomass + fTreatment + fNutrient +
+fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
+
+#Drop fTreatment:fNutrient
+M5.Drop1 <-update(M5.Full, .∼.-fTreatment:fNutrient)
+anova(M5.Full, M5.Drop1)
+
+#Drop Biomass
+M5.Drop2 <- update(M5.Full, .∼. -Biomass)
+
+anova(M5.Full, M5.Drop2)
+
+```
+
+We can drop the fTreatment:fNutrient interaction term, but also the
+main term Biomass
+
+
+```{r }
+#New Full Model
+M6.Full<-gls(Concentration ∼ fTreatment + fNutrient+ fTreatment:fNutrient,
+weights = vfOptim, method = "ML", data = Biodiv)
+
+M6.Drop1<-update(M6.Full, .∼. -fTreatment:fNutrient)
+
+anova(M6.Full, M6.Drop1)
+
+```
+
+The interaction term fTreatment:fNutrient is highly significant, so no further terms can be dropped
+
+##THE FINAL MODEL!
+We comapred nested models several times and ended up with a model containing Nutrient, Enrichment and their interaction. We we can reapply REML estimation and check for normality and homogeneity
+
+```{r }
+MFinal <- gls(Concentration ∼ fTreatment * fNutrient, weights = vfOptim, method = "REML", data = Biodiv)
+
+E <- resid(MFinal, type = "normalized")
+
+Fit <- fitted(MFinal)
+
+op <- par(mfrow = c(1, 2))
+
+plot(x = Fit, y = E, xlab = "Fitted values", ylab = "Residuals", main = "Residuals versus fitted values")
+
+identify(Fit, E)
+
+hist(E, nclass = 15)
+
+par(op)
+```
+
+
+```{r }
+summary(MFinal)
+
+```
+
+
+Now we can write this up in a table of our results!!
