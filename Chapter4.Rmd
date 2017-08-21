@@ -1,6 +1,5 @@
 ---
 title: "Chapter4"
-output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
@@ -18,13 +17,14 @@ Fixed term and a random term. The fixed term describes the response varable Y as
 The easiest way to over come heterogeneity is to transform your data but this removes interesting ecological information so Zuur suggests not thorwing away data because it is statitistically inconvienient 
 
 ```{r}
+data(Squid)
 Squid$fMONTH <- factor(Squid$MONTH)
 ```
 
 ##4.1 DEALING WITH HETEROGENEITY
 
 ```{r }
-M1 <- lm(Testisweight ∼ DML * fMONTH, data = Squid)
+M1 <- lm(Testisweight ~ DML * fMONTH, data = Squid)
 
 
 op <- par(mfrow = c(2, 2), mar = c(4, 4, 2, 2))
@@ -56,11 +56,11 @@ So we can fix our problem of heterogentity by fitting a generalised least square
 
 library(nlme)
 
-M.lm <- gls(Testisweight ∼ DML * fMONTH, data=Squid)
+M.lm <- gls(Testisweight ~ DML * fMONTH, data=Squid)
 
-vf1Fixed <- varFixed(∼DML)
+vf1Fixed <- varFixed(~DML)
 
-M.gls1 <- gls(Testisweight ∼ DML * fMONTH,
+M.gls1 <- gls(Testisweight ~ DML * fMONTH,
                 weights = vf1Fixed, data = Squid)
 
 anova(M.lm, M.gls1)
@@ -75,9 +75,9 @@ We now have the problem that spread also differes per month so we need to try ad
 
 
 ```{r }
-vf2 <- varIdent(form= ∼ 1 | fMONTH)
+vf2 <- varIdent(form= ~ 1 | fMONTH)
 
-M.gls2 <- gls(Testisweight ∼ DML*fMONTH, data =Squid,
+M.gls2 <- gls(Testisweight ~ DML*fMONTH, data =Squid,
                 weights = vf2)
 anova(M.lm, M.gls1, M.gls2)
 ```
@@ -105,7 +105,7 @@ No clear pattern ... As there is no clear pattern lets plot the residuals versus
 
 ```{r }
 E <- resid(M.lm)
-coplot(E ∼ DML | fMONTH, data = Squid)
+coplot(E ~ DML | fMONTH, data = Squid)
 
 ```
 
@@ -123,9 +123,9 @@ Here the variance of the residuals is modelled as the variance of the population
 
 
 ```{r }
-vf3 <- varPower(form =∼ DML)
+vf3 <- varPower(form =~ DML)
 
-M.gls3 <- gls(Testisweight ∼ DML * fMONTH,
+M.gls3 <- gls(Testisweight ~ DML * fMONTH,
                 weights = vf3, data = Squid)
 
 summary(M.gls3)
@@ -139,9 +139,9 @@ We can now model an increase in spread for larger DML values but only in certain
 
 
 ```{r }
-vf4 <- varPower(form =∼ DML | fMONTH)
+vf4 <- varPower(form =~ DML | fMONTH)
 
-M.gls4 <- gls(Testisweight ∼ DML * fMONTH,
+M.gls4 <- gls(Testisweight ~ DML * fMONTH,
                 data = Squid, weights = vf4)
 
 anova(M.lm, M.gls1, M.gls2, M.gls3, M.gls4)
@@ -154,9 +154,9 @@ anova(M.lm, M.gls1, M.gls2, M.gls3, M.gls4)
 using this function we account for variation in the DML per month 
 
 ```{r }
-vf5 <- varExp(form =∼ DML)
+vf5 <- varExp(form =~ DML)
 
-M.gls5 <- gls(Testisweight ∼ DML * fMONTH,
+M.gls5 <- gls(Testisweight ~ DML * fMONTH,
                 weights = vf5, data = Squid)
 
 anova(M.lm, M.gls1, M.gls2, M.gls3, M.gls4, M.gls5)
@@ -169,9 +169,9 @@ anova(M.lm, M.gls1, M.gls2, M.gls3, M.gls4, M.gls5)
 We can also allow for Month using this function
 
 ```{r }
-vf7 <- varConstPower(form =∼ DML | fMONTH)
+vf7 <- varConstPower(form =~ DML | fMONTH)
 
-M.gls7 <- gls(Testisweight ∼ DML * fMONTH,
+M.gls7 <- gls(Testisweight ~ DML * fMONTH,
                 weights = vf7, data = Squid)
 
 anova(M.lm, M.gls1, M.gls2, M.gls3, M.gls4, M.gls5, M.gls7)
@@ -183,9 +183,9 @@ The AIC is again lower in this model at 3431.51
 ##The varComb VARIANCE STRUCTURE - With this variance structure, we can allow for both an increase in residual spread for larger DML values as well as a different spread per month. Here we combine varIdent and varExp
 
 ```{r }
-vf8 <- varComb(varIdent(form =∼ 1 | fMONTH) ,
-               varExp(form =∼ DML) )
-M.gls8 <- gls(Testisweight ∼ DML * fMONTH,
+vf8 <- varComb(varIdent(form =~ 1 | fMONTH) ,
+               varExp(form =~ DML) )
+M.gls8 <- gls(Testisweight ~ DML * fMONTH,
                 weights = vf8, data = Squid)
 
 anova(M.lm, M.gls1, M.gls2, M.gls3, M.gls4,
@@ -211,9 +211,10 @@ So which model?? Model 4
 Now that we have chosen our potential model  we can graphically validate our choice using two types of residules - residuals calculated as observed minus fitted values (also called ordinary residuals) and normalised residuals.
 
 ```{r }
+
 E1 <- resid(M.gls4)
 
-coplot(E1 ∼ DML | fMONTH,
+coplot(E1 ~ DML | fMONTH,
          ylab = "Ordinary residuals", data = Squid)
 
 ```
@@ -223,7 +224,7 @@ We want to standadise out residuals instead of using the ordinary residuals for 
 ```{r }
 E2 <- resid(M.gls4, type = "normalized")
 
-coplot(E2 ∼ DML | fMONTH, data = Squid,
+coplot(E2 ~ DML | fMONTH, data = Squid,
          ylab = "Normalised residuals")
 
 ```
@@ -242,7 +243,7 @@ Biodiv <- Biodiversity
 Biodiv$fTreatment <- factor(Biodiv$Treatment)
 Biodiv$fNutrient <- factor(Biodiv$Nutrient)
 
-boxplot(Concentration ∼ fTreatment * fNutrient, data = Biodiv)
+boxplot(Concentration ~ fTreatment * fNutrient, data = Biodiv)
 
 ```
 
@@ -250,7 +251,7 @@ boxplot(Concentration ∼ fTreatment * fNutrient, data = Biodiv)
 We can see big variations in the alage enriched with ammonium - higher concentartions and more variation 
 
 ```{r }
-M0 <- lm(Concentration ∼
+M0 <- lm(Concentration ~
            Biomass * fTreatment * fNutrient,
            data = Biodiv)
 
@@ -266,7 +267,7 @@ Instead of a data transformation we will try to use a GLS to allow for different
 First we must explore why there is heterogeneity 
 ```{r }
 library(nlme)
-f1 <- formula(Concentration ∼ Biomass * fTreatment * fNutrient)
+f1 <- formula(Concentration ~ Biomass * fTreatment * fNutrient)
 
 ```
 
@@ -279,19 +280,19 @@ M0 <- gls(f1, data = Biodiv)
 
 Treatment and nutrient
 ```{r }
-M1A <-gls(f1, data = Biodiv, weights = varIdent(form =∼ 1 | fTreatment * fNutrient))
+M1A <-gls(f1, data = Biodiv, weights = varIdent(form =~ 1 | fTreatment * fNutrient))
 
 ```
 
 Just nutrient
 ```{r }
-M1B <-gls(f1, data = Biodiv, weights = varIdent(form =∼ 1 | fNutrient))
+M1B <-gls(f1, data = Biodiv, weights = varIdent(form =~ 1 | fNutrient))
 
 ```
 
 Just treatment 
 ```{r }
-M1C <-gls(f1, data = Biodiv, weights = varIdent(form =∼ 1 | fTreatment))
+M1C <-gls(f1, data = Biodiv, weights = varIdent(form =~ 1 | fTreatment))
 
 anova(M0, M1A, M1B, M1C)
 
@@ -349,22 +350,22 @@ Because we are comparing factors using an anova the ordering of the factors will
 
 
 ```{r }
-M2A1 <- gls(Concentration ∼ Biomass + fTreatment +
+M2A1 <- gls(Concentration ~ Biomass + fTreatment +
 fNutrient +
 Biomass:fTreatment +
 Biomass:fNutrient +
 fTreatment:fNutrient +
 Biomass:fTreatment:fNutrient,
-weights = varIdent(form =∼ 1 |
+weights = varIdent(form =~ 1 |
 fTreatment * fNutrient),
 method = "ML", data = Biodiv)
 
-M2A2 <- gls(Concentration ∼ Biomass + fTreatment +
+M2A2 <- gls(Concentration ~ Biomass + fTreatment +
 Nutrient +
 Biomass:fTreatment +
 Biomass:fNutrient +
 fTreatment:fNutrient,
-weights=varIdent(form =∼ 1 |
+weights=varIdent(form =~ 1 |
 fTreatment * fNutrient),
 method = "ML", data = Biodiv)
 
@@ -380,26 +381,26 @@ We will now complete a Backwards Selection - is is very time consuming and Zuur 
 The following code drops each two-way interaction and applies a likelihood ratio test
 
 ```{r }
-vfOptim <- varIdent(form =∼ 1 | fTreatment*fNutrient)
+vfOptim <- varIdent(form =~ 1 | fTreatment*fNutrient)
 
 #Assess significance of all 3 2-way interactions
 #Full model
-M3.Full <- gls(Concentration ∼ Biomass + fTreatment + fNutrient + Biomass:fTreatment + Biomass:fNutrient + fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
+M3.Full <- gls(Concentration ~ Biomass + fTreatment + fNutrient + Biomass:fTreatment + Biomass:fNutrient + fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
 
 
 #Drop Biomass:fTreatment
-M3.Drop1 <- gls(Concentration ∼ Biomass + fTreatment + fNutrient + Biomass:fNutrient + fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
+M3.Drop1 <- gls(Concentration ~ Biomass + fTreatment + fNutrient + Biomass:fNutrient + fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
 
 anova(M3.Full, M3.Drop1)
 
 #Drop Biomass:fNutrient
-M3.Drop2 <- gls(Concentration ∼ Biomass + fTreatment + fNutrient + Biomass:fTreatment + fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
+M3.Drop2 <- gls(Concentration ~ Biomass + fTreatment + fNutrient + Biomass:fTreatment + fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
 
 anova(M3.Full, M3.Drop2)
 
 
 #Drop fTreatment:fNutrient
-M3.Drop3 <- gls(Concentration ∼ Biomass + fTreatment + fNutrient +
+M3.Drop3 <- gls(Concentration ~ Biomass + fTreatment + fNutrient +
 Biomass:fTreatment + Biomass:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
 
 anova(M3.Full, M3.Drop3)
@@ -413,15 +414,15 @@ ratio test, and obtained p-values. Clearly, the two way interaction term Biomass
 
 From the first model we can drop two of the teo-way interaction terms but no main terms can be dropped yet. 
 ```{r }
-M4.Full <- gls(Concentration∼ Biomass + fTreatment + fNutrient + Biomass:fNutrient + fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
+M4.Full <- gls(Concentration~ Biomass + fTreatment + fNutrient + Biomass:fNutrient + fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
 
 #Drop Biomass:fNutrient
-M4.Drop1 <- update(M4.Full, .∼. -Biomass:fNutrient)
+M4.Drop1 <- update(M4.Full, .~. -Biomass:fNutrient)
 
 anova(M4.Full, M4.Drop1)
 
 #Drop fTreatment:fNutrient
-M4.Drop2<-update(M4.Full, .∼. -fTreatment:fNutrient)
+M4.Drop2<-update(M4.Full, .~. -fTreatment:fNutrient)
 
 anova(M4.Full, M4.Drop2)
 
@@ -431,15 +432,15 @@ They decied to drop the Biomass:fNutrient interaction as a p value of 0.04 is no
 
 ```{r }
 #New full model
-M5.Full <- gls(Concentration ∼ Biomass + fTreatment + fNutrient +
+M5.Full <- gls(Concentration ~ Biomass + fTreatment + fNutrient +
 fTreatment:fNutrient, weights = vfOptim, method = "ML", data = Biodiv)
 
 #Drop fTreatment:fNutrient
-M5.Drop1 <-update(M5.Full, .∼.-fTreatment:fNutrient)
+M5.Drop1 <-update(M5.Full, .~.-fTreatment:fNutrient)
 anova(M5.Full, M5.Drop1)
 
 #Drop Biomass
-M5.Drop2 <- update(M5.Full, .∼. -Biomass)
+M5.Drop2 <- update(M5.Full, .~. -Biomass)
 
 anova(M5.Full, M5.Drop2)
 
@@ -451,10 +452,10 @@ main term Biomass
 
 ```{r }
 #New Full Model
-M6.Full<-gls(Concentration ∼ fTreatment + fNutrient+ fTreatment:fNutrient,
+M6.Full<-gls(Concentration ~ fTreatment + fNutrient+ fTreatment:fNutrient,
 weights = vfOptim, method = "ML", data = Biodiv)
 
-M6.Drop1<-update(M6.Full, .∼. -fTreatment:fNutrient)
+M6.Drop1<-update(M6.Full, .~. -fTreatment:fNutrient)
 
 anova(M6.Full, M6.Drop1)
 
@@ -466,7 +467,7 @@ The interaction term fTreatment:fNutrient is highly significant, so no further t
 We comapred nested models several times and ended up with a model containing Nutrient, Enrichment and their interaction. We we can reapply REML estimation and check for normality and homogeneity
 
 ```{r }
-MFinal <- gls(Concentration ∼ fTreatment * fNutrient, weights = vfOptim, method = "REML", data = Biodiv)
+MFinal <- gls(Concentration ~ fTreatment * fNutrient, weights = vfOptim, method = "REML", data = Biodiv)
 
 E <- resid(MFinal, type = "normalized")
 
