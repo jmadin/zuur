@@ -1,0 +1,612 @@
+#    Zuur, Ieno, Walker, Saveliev and Smith - chapter 5
+
+Load Zuur et al. functions and load data
+
+```{r}
+source("R/HighstatLibV10.R")
+data(RIKZ)
+```
+
+## Question: is there a relationship between species richness, exposure, and NAP (the height of a sampling station relative to tide)
+
+9 beaches, 5 samples per beach, measures of macrofauna and abiotic variables
+predictors: NAP and Exposure
+Exposure is calculated per beach and has two levels, a and b
+
+Richness values are likely to be more similar within a beach than across beaches
+
+A suboptimal analysis approach to help explain: 2-stage analysis.
+
+Stage 1: first, model each beach separately (in a for loop) as a simple regression of richness on NAP
+
+```{r}
+numbeaches <- 9
+Beta<-vector(length=numbeaches)
+for (i in 1:numbeaches){
+ Mi<-summary(lm(Richness~NAP,subset = (Beach==i),data=RIKZ))
+ # Beta stores the NAP coefficient for each beach's model
+ Beta[i]<-Mi$coefficients[2,1]
+}
+round(Beta,2)
+```
+
+The coefficient for NAP differs a lot for different beaches.
+
+Stage 2 of analysis: model regression coefficients (betas just estimated, i.e. the effect of NAP on richness) as a function of exposure.  This is a one-way ANOVA answering the question: if there are two groups of beaches, one with Exposure=a and one with Exposure=b, how do the effects of NAP on richness within a group compare with the effects between a group?  i.e. is there a difference between beaches with Exposure=a and Exposure=b?
+
+```{r}
+ExposureBeach <- c("a","a","b","b","a",
+                     "b","b","a","a")
+tmp2 <- lm(Beta ~ factor(ExposureBeach),data=RIKZ)
+anova(tmp2)
+```
+
+The ANOVA suggests that exposure isn't significant.
+
+Disadvantages of the 2-stage analysis:
+1) each beach is represented by only a single number in the second stage, so it doesn't matter if you had 5 or 500 samples per beach (but intuitively, it should matter, 500 samples contains more info)
+2) the second stage is analyzing estimated parameters from the first stage, it's not modelling species richness directly (which is what you care about)
+3) the second stage has no information about the uncertainty of the estimates in the first stage (i.e. doesn't know if you had 5 or 500 samples per beach)
+
+## Linear mixed effects model
+
+Advantage: combine the two stages into a single simultaneous model
+
+Richness = overall intercept + overall slope x predictors + beach-specific intercept + beach-specific slope x predictors + beach-specific error
+
+overall components: "fixed"
+beach-specific components: "random"
+
+the same predictors may show up in both the overall and beach-specific components.
+
+Three examples: random intercept model, random intercept & (random) slope model, random effects model
+
+# Random intercept model
+
+We could model species richness as a function of NAP with a beach-specific intercept.  Cost: have to fit 8 extra parameters (# beaches - 1), and maybe we aren't really very interested in knowing the effect of each beach.
+
+Alternative: could use beach as a random effect: just model it as a normally distributed error term (one per beach), in addition to the usual normally distributed error term E (one per observation).
+
+lme for linear mixed effects models
+1 | fBeach specifies a random intercept model with the categorical variable fBeach
+
+```{r}
+library(nlme)
+RIKZ$fBeach <- factor(RIKZ$Beach)
+Mlme1 <- lme(Richness ~ NAP, random = ~1 | fBeach,data=RIKZ)
+summary(Mlme1)
+```
+
+In the above, the estimated error term for beach ~ N(0, 2.94^2).
+The estimated error term per observation = residuals ~ N(0, 3.06^2).  We'll come back to this later.
+
+Plotting the fitted values, with and without the estimated intercept for each beach:
+
+```{r}
+F0<-fitted(Mlme1,level=0)
+F1<-fitted(Mlme1,level=1)
+I<-order(RIKZ$NAP)
+NAPs<-sort(RIKZ$NAP)
+plot(NAPs,F0[I],lwd=4,type="l",ylim=c(0,22),
+     ylab="Richness",xlab="NAP")
+for (i in 1:numbeaches){
+   x1<-RIKZ$NAP[RIKZ$Beach==i]
+   y1<-F1[RIKZ$Beach==i]
+   K<-order(x1)
+   lines(sort(x1),y1[K])
+}
+text(RIKZ$NAP,RIKZ$Richness,RIKZ$Beach,cex=0.9)
+```
+The thick line in the plot is the overall fit for the population of beaches, and the thinner lines are the fits for each individual beach.  The lines differ only in intercept, not slope, because the model specified only a (randomly distributed) intercept term for each beach.
+
+What if we think the slope might also be different for each beach?
+
+# Random intercept and slope model
+
+We could fit a (non-mixed) linear regression model with an interaction between NAP and beach, and estimate each param and its standard error - but this uses up a lot of degrees of freedom for something that we're not that interested in. Still, if there is an interaction between beach and NAP, the model has to include it or potentially lead to incorrect conclusions because the residuals would be correlated with the beaches.
+
+To make more efficient use of data than estimating things we're not very interested in, and to allow beach to have an influence both on intercept and slope, use both a random intercept and a random slope.
+
+```{r}
+Mlme2 <- lme(Richness ~ NAP,
+             random = ~1 + NAP | fBeach, data = RIKZ)
+summary(Mlme2)
+```
+
+There are three standard deviations in the random effects part: 
+
+1) for the random intercept (~ N(0,3.55^2)), which says how much the overall population line can move up or down depending on which beach it is
+
+2) for the random slope (~ (N(0,1.71^2))), which says how much the slope of the overall population line can change depending on which beach it is
+
+3) for the residuals (~ N(0,2.70^2)), which shows how much a single point can be off the overall population line, given its beach
+
+Note that the standard deviation for the random intercept is much larger than for the random slope, so the beaches vary more in intercept than in slope.
+
+Note also the correlation between the random slopes and intercepts: -0.99, which means that beaches with a high positive intercept have a high negative slope.  A correlation this high may indicate numerical instability.
+
+Will talk about how to compare the random intercept model (AIC 247.5) with the random intercept & slope model (AIC 244.4) later.
+
+Plotting this model: lines are no longer parallel, because different beaches have different slopes
+
+```{r}
+F0<-fitted(Mlme2,level=0)
+F1<-fitted(Mlme2,level=1)
+I<-order(RIKZ$NAP)
+NAPs<-sort(RIKZ$NAP)
+plot(NAPs,F0[I],lwd=4,type="l",ylim=c(0,22),
+     ylab="Richness",xlab="NAP")
+for (i in 1:numbeaches){
+   x1<-RIKZ$NAP[RIKZ$Beach==i]
+   y1<-F1[RIKZ$Beach==i]
+   K<-order(x1)
+   lines(sort(x1),y1[K])
+}
+text(RIKZ$NAP,RIKZ$Richness,RIKZ$Beach,cex=0.9)
+```
+
+# Random effects model
+
+For the sake of argument, if we had random effects only and no fixed effects, that's called a random effects model.  In this example, that means dropping the NAP predictor.  This predicts only a single level per beach, plus the error term E.
+
+```{r}
+Mlme3 <- lme(Richness ~ 1, random = ~1 | fBeach,
+           data = RIKZ)
+summary(Mlme3)
+```
+
+The standard deviation of the residuals is 3.9, compared with 2.7 in the random slope & intercept model (so probably a worse model, accounting for less of the variation in observations).
+
+Will come back later to how to choose between a random effects model, random intercept model, and random intercept & slope model.
+
+## Induced correlations: what is the correlation between richness values at the same beach and at different beaches?
+Equivalent question: what is the covariance matrix of the observations? (translate back into the first question when you hear this)
+
+In a model with fixed predictors only, the richness values would all be uncorrelated with each other.  If we use the random intercept model, richness values at the same beach are correlated (they share the random intercept) but the model includes no correlation between richness at different beaches.  
+
+The correlation between richness values at the same beach is (variance of random intercept for beach) / (variance of random intercept for beach + variance of error term).  This is called an induced covariance structure, which wasn't explicitly specified but results from something else we did specify (i.e. the random intercept).
+(Side note: I don't really like the word "induced" here.  That makes it sound like we did something to cause the correlation.  From the point of view of the model, I guess you could say we did, in that the model now has correlated error terms.  But from the point of the data, it was there in the data all along.)
+
+Using the variances calculated in the random intercept model (around lines 73-81 above), the correlation for richness values at the same beach is 2.94^2 / (2.94^2 + 3.06^2) = 0.48.  This correlation is also called the intraclass correlation (each beach is a "class").
+
+If we use the random intercept & slope model instead, it's a little more complicated to calculate the correlations, but the structure is the same: richness values at the same beach are correlated, from different beaches are uncorrelated.
+
+# Intraclass correlation coefficient
+If two data points are correlated, they don't contain the same amount of information as two data points that are uncorrelated, even though it may cost the same to collect them.
+
+The intraclass correlation coefficient can be used to calculate an "effective sample size", which is a fairer estimate of how much independent information you have --and consequently, how close your estimates of parameters may be to the true population parameters (i.e., how large or small your effective standard error is).
+
+## Marginal model: how do we estimate parameters?
+
+One way of including the correlation between samples from the same beach is to use a random effect, as above.  Another way is to explicitly specify a covariance structure for the error term instead: usually we say Ei ~ N(0, sigma^2), implying all Ei are independent of each other, but we can create a covariance matrix that has non-zero correlation between Ei from the same beach.  This is called a marginal model, where we specify a form for the covariance matrix.
+
+Two options at opposite extremes:
+1) each pair of Ei from the same beach has its own correlation (lots of parameters to estimate, and seriously, are they interesting?): general correlation matrix
+2) all pairs of Ei from the same beach have the same correlation (only one param to estimate): compound symmetric matrix
+
+Random intercept model and marginal model give the same parameter estimates and standard errors, and likelihood, below:
+
+```{r}
+M.mixed <- lme(Richness ~ NAP, random = ~1 | fBeach,
+                 method = "REML", data = RIKZ)
+M.gls <- gls(Richness ~ NAP, method = "REML",
+          correlation = corCompSymm(form =~1 | fBeach),
+          data = RIKZ)
+summary(M.mixed)
+summary(M.gls)
+```
+
+## Maximum likelihood and REML (restricted ML) estimation
+
+Definition: a biased estimator produces an estimate that's systematically wrong. With an unbiased estimator, as your data set gets bigger, the estimate will get closer and closer to the true value you're trying to estimate. With a biased estimator, it doesn't matter how big your data set is, the estimate will converge to something different from the true value.
+
+The goal of maximum likelihood estimation: find the parameter values that maximize the likelihood (probability) of the data that you actually have.  ML produces unbiased estimates for the fixed effects (which are means).  But it produces biased estimates for the random effects (for a random effect, what you're estimating is a variance, and in order to estimate a variance you have to know what the true mean is - and you don't, you only have estimates of the true mean).  Specifically, it will underestimate the random effect (variance).
+
+What REML does is use the residuals from the regression with fixed effects only.  This removes the mean - so you don't have to use estimates of the mean, which are what cause the bias - and lets you get an unbiased estimate of the random effects (variances).  
+
+Why not use REML for everything?  REML estimates are biased for the fixed effects, unbiased for random.  ML is the other way around.  That's why you need both.
+
+
+```{r}
+RIKZ$fExp<-RIKZ$Exposure
+RIKZ$fExp[RIKZ$fExp==8]<-10
+RIKZ$fExp<-factor(RIKZ$fExp,levels=c(10,11))
+M0.ML <- lme(Richness ~ NAP, data = RIKZ,
+              random = ~1| fBeach, method = "ML")
+M0.REML <-lme(Richness ~ NAP, random = ~1|fBeach,
+              method = "REML", data = RIKZ)
+M1.ML <- lme(Richness ~ NAP+fExp, data = RIKZ,
+              random = ~1| fBeach, method = "ML")
+M1.REML <- lme(Richness ~NAP+fExp, data = RIKZ,
+              random = ~1|fBeach, method = "REML")
+```
+The estimates are a bit different.  It would be interesting to simulate data with known parameters and then apply the same analyses, so we could compare the estimates against the known true parameters.
+
+## Model selection in mixed effects modelling
+
+Two main options for model selection:
+
+1) information criteria like AIC & BIC.  These combine likelihood (to measure how well the model fits the data) and the number of parameters (to counterbalance the better fit of more complex models).  If comparing two AICs or BICs, need to make sure both use ML or both use REML; can't mix ML and REML.
+
+2) hypothesis testing, i.e. t-statistic, F-statistic, or likelihood ratio test.  These apply to fixed effects, but a mixed effects model has both fixed and random effects, which interplay, so both must be considered.
+
+Protocol for top-down mixed-model selection strategy:
+
+1) Start with a model whose fixed component contains all explanatory variables and as many interactions as possible (the "beyond optimal", or "way too much" model).  If you can't get everything in, use the explanatory variables you think are most important.
+
+2) Using that model, find the best structure for the random component.  Because the fixed component contains as many explanatory variables as possible, the random component hopefully will not contain anything we want in the fixed component.  Use REML to compare models with nested random structures.
+
+3) When you have the best random structure, go back to the fixed structure and look for the best fixed structure.  If you're comparing nested fixed effects (same random structure), use ML estimation (ML because you want unbiased estimates of the fixed effects).  If you're looking at fixed effects in a single model, use F or t statistics with REML estimation.  (Why REML?  I think because F and t depend on the error term variance, which is unbiased when estimated with REML.)
+
+4) Make sure the final model is fit with REML.
+
+## Beaches and species richness: good vs. bad model selection
+
+# Bad approach to model selection
+
+For illustrative purposes, do it the wrong way.  Start with a model that doesn't have enough explanatory variables in the fixed component - specifically, use NAP only, no exposure.
+
+Step 1: fit a model with a fixed component and different random components.  Actually 3 models: 
+(a) no random component other than the usual error terms/residuals
+(b) random intercept model (for beach)
+(c) random intercept & slope model (for beach)
+
+```{r}
+Wrong1 <- gls(Richness ~ 1 + NAP, method = "REML",
+               data = RIKZ)
+Wrong2 <- lme(Richness ~ 1 + NAP, random = ~1|fBeach,
+               method = "REML", data = RIKZ)
+Wrong3 <- lme(Richness ~ 1 + NAP, method = "REML",
+               random = ~1 + NAP | fBeach, data = RIKZ)
+```
+
+Step 2: decide which of these 3 models is best.  REML was used, so can compare AIC/BIC. 
+
+```{r}
+AIC(Wrong1,Wrong2,Wrong3)
+```
+The AIC suggests the 3rd model, with random slope & intercept, is best, but 2nd model, with random slope, is also better than the 1st model, with no random effect.
+
+Or could use likelihood ratio test because the models are nested.
+
+```{r}
+anova(Wrong1,Wrong2,Wrong3)
+```
+
+But wait... the p-value from the ANOVA comparing Wrong2 with Wrong1 is incorrect because this likelihood ratio isn't distributed as chi-squared (which is the distribution the p-values are obtained from).  Usually when you use ANOVA to compare two models, you're testing one parameter against 0, and that param is normally distributed with mean 0 under H0.  Here, the random intercept ~ N(0, sigma^2), and you're testing sigma^2 > 0 (true, it's one parameter, and it's a question of whether it's 0 or not - but it can't be smaller than 0, it's a variance, so it doesn't have the same distribution as a param that can be either positive or negative.)  The likelihood ratio is actually distributed as 0.5 * chi-squared(df=1).  Can get the correct p-value from:
+```{r}
+.5 * (1- pchisq(12.720743,1))
+```
+
+The p-value from the ANOVA comparing Wrong3 with Wrong2 is also wrong and can be corrected.  I think what the distribution of the likelihood ratio is, is the average of chi-sq(df=1) for Wrong2 and chi-sq(df=2) for Wrong3, which has one more parameter estimated.  [Side note: I could be wrong in my guess as to what's going on here, so don't trust me too far.  But: a chi-squared distribution is what you get from summing squared normal distributions, and the number of squared normals you summed is the degrees of freedom.  I think the squared normals here are the variance of the slope (Wrong3 only) and the variance of the intercept (both Wrong2 & Wrong3).  Further, I'm guessing that it's the average of the two chi-squareds because it's a mixture of the two distributions.]
+
+Even after correcting the p-values, this step indicates: the best random component is the random intercept & slope.
+
+Step 3: look for best fixed structure given the random structure picked in the step above.
+
+```{r}
+summary(Wrong3)
+```
+
+The only fixed effect, NAP, looks significant in Wrong3, so we should keep it in the model.  All we could change is to add exposure, or exposure x NAP.
+```{r}
+RIKZ$fExp<-RIKZ$Exposure
+RIKZ$fExp[RIKZ$fExp==8]<-10
+RIKZ$fExp<-factor(RIKZ$fExp,levels=c(10,11))
+
+Wrong4 <- lme(Richness ~1 + NAP * fExp,
+             random = ~1 + NAP | fBeach,
+             method = "REML", data = RIKZ)
+anova(Wrong4)
+summary(Wrong4)
+```
+F-statistic (from ANOVA) and t-statistic both suggest dropping the interaction.
+
+```{r}
+Wrong4 <- lme(Richness ~1 + NAP + fExp,
+             random = ~1 + NAP | fBeach,
+             method = "REML", data = RIKZ)
+
+summary(Wrong4)
+```
+The exposure term doesn't look very significant either.  Zuur et al. say that the F-statistic and t-statistic are only approximate in this case, which might be because the (effective) sample size isn't very large.
+
+Now let's try likelihood ratio testing using ML estimation, instead.  Fit models with the same random effects structure and ML estimation.
+
+```{r}
+ lmc <- lmeControl(niterEM = 5200, msMaxIter = 5200)
+ Wrong4A <- lme(Richness ~1 + NAP, method="ML",
+             control = lmc, data = RIKZ,
+               random = ~1+NAP|fBeach)
+ Wrong4B <- lme(Richness ~ 1 + NAP + fExp,
+               random = ~1 + NAP | fBeach, method="ML",
+               data = RIKZ,control = lmc)
+ Wrong4C <- lme(Richness ~1 + NAP * fExp,
+               random = ~1 + NAP | fBeach, data = RIKZ,
+               method = "ML", control = lmc)
+ anova(Wrong4A, Wrong4B, Wrong4C)
+```
+The first line above, lmeControl, is to avoid nonconvergence (by giving lme more time to converge).
+
+Same conclusion as with the F-statistic and t-statistic: neither exposure nor NAP x exposure look significant.  So the best model so far has NAP as a fixed effect, with random slope & intercept.
+
+Step 4: use REML to estimate the model we've concluded is optimal
+```{r}
+Wrong5 <- lme(Richness ~ 1 + NAP, random = ~1 + NAP | fBeach,
+              method="REML",data=RIKZ)
+summary(Wrong5)
+```
+
+# Good approach to model selection, i.e. revising all the above
+
+Step 1: Start with as many explanatory variables as possible in the fixed component: i.e. NAP, exposure, and their interaction.
+
+```{r}
+ B1 <- gls(Richness ~ 1 + NAP * fExp,
+            method = "REML", data = RIKZ)
+ B2 <- lme(Richness ~1 + NAP * fExp, data = RIKZ,
+        random = ~1 | fBeach, method = "REML")
+ B3 <- lme(Richness ~ 1 + NAP * fExp,data = RIKZ,
+        random = ~1 + NAP | fBeach, method = "REML")
+AIC(B1,B2,B3)
+```
+
+Step 2: the AIC values suggest B2 is the best model, with just a random intercept (not random intercept & slope as with the bad approach above).
+
+Step 3: look for best fixed structure given the random structure picked in the step above.
+```{r}
+summary(B2)
+B2 <- lme(Richness ~1 + NAP + fExp, data = RIKZ,
+        random = ~1 | fBeach, method = "REML")
+summary(B2)
+```
+
+The interaction isn't hugely convincing (t-stats are only approximate here), so drop it and refit.  Outcome is similar: p-value for exposure is 0.02.
+
+Step 4: use REML to fit the model we've concluded is optimal (did this just above)
+
+Compare the model fit with the bad approach (NAP as fixed effect, random slope and intercept) with the model fit with the good approach (NAP as fixed effect, weak exposure fixed effect, random intercept) - different biological conclusions.  The problem with the "bad approach" model is that the random effects soaked up some of the information we'd like to have in the fixed effects, because the fixed effects didn't take it up first.
+
+## Model validation
+
+Residuals are (still) the main way to validate the model fit with REML in step 4.
+Plot residuals against fitted values and look for a pattern
+and against each explanatory variable and look for a pattern
+and check for normality of residuals with a histogram or qqplot.
+
+## Example: Begging behavior of nestling barn owls
+
+Response variable: sibling negotiation, operationalized as the number of calls by all nestlings in the 30 sec before the arrival of a parent, divided by the number of nestlings (2-7 per nest)
+
+Explanatory variables: sex of the parent, arrival time of the parent, and food treatment (half of the 27 nests were given extra food, and the other half had leftovers removed)
+
+Measurements took place over two nights, from 21:30 to 05:30.
+The food treatment was swapped on the second night.
+
+Nest will be a random effect, because
+(a) there were multiple observations from each nest, which wil be correlated
+(b) there were 27 nests, so using it as a fixed effect would use up a lot of degrees of freedom
+(c) the goal is to generalize to the population of similar barn owl nests and not just describe these 27 nests.
+
+Let's use the 10-step protocol from chapter 4.
+
+# Step 0: inspect the data 
+
+```{r}
+data(Owls)
+names(Owls)
+# "FoodTreatment"      "SexParent"
+#[4] "ArrivalTime"        "SiblingNegotiation" "BroodSize"
+#[7] "NegPerChick"
+
+boxplot(NegPerChick~Nest,data=Owls,xlab="Nest",ylab="Negotiation per chick")
+boxplot(NegPerChick~FoodTreatment,data=Owls,xlab="Food treatment",ylab="Negotiation per chick")
+boxplot(NegPerChick~SexParent,data=Owls,xlab="Sex of parent",ylab="Negotiation per chick")
+
+plot(x=Owls$ArrivalTime,y=Owls$NegPerChick)
+```
+
+# Step 1: linear regression
+
+Model nestling negotiation as a function of sex of the parent, arrival time, and food treatment, and interactions of parent sex with time & treatment.
+```{r}
+M.lm=lm(NegPerChick~SexParent*FoodTreatment+SexParent*ArrivalTime,data=Owls)
+plot(M.lm)
+```
+The plot of residuals vs. fitted values indicates residual variance increases with fitted value -> heterogeneity.  Check residuals against predictors.
+```{r}
+par(mfrow=c(2,2))
+plot(Owls$SexParent,resid(M.lm))
+plot(Owls$FoodTreatment,resid(M.lm))
+plot(Owls$ArrivalTime,resid(M.lm))
+par(mfrow=c(1,1))
+```
+
+Not really an obvious pattern between residuals and the predictors, so hard to know how to model heterogeneity explicitly.  Use a log10(Y+1) transform instead.
+
+```{r}
+Owls$LogNeg<-log10(Owls$NegPerChick+1)
+M2.lm=lm(LogNeg~SexParent*FoodTreatment+SexParent*ArrivalTime,data=Owls)
+E=rstandard(M2.lm)
+
+op<-par(mar=c(3,3,2,2))
+boxplot(E~Nest,data=Owls,axes=FALSE,ylim=c(-3,3))
+abline(0,0)
+axis(2)
+text(1:27,-2.5, levels(Owls$Nest),cex=0.75,srt=65)
+par(op)
+```
+Some nests clearly have residuals different from 0 so need to be modelled explicitly.  Could be a fixed term, but good reasons (noted above) to handle as random.
+
+# Step 2: fit the model with gls
+This is just the same model as above, but gls output can be compared with the lme output we'l produce later.
+
+```{r}
+library(nlme)
+Form<-formula(LogNeg~SexParent*FoodTreatment+SexParent*ArrivalTime)
+M.gls=gls(Form,data=Owls)
+```
+
+# Step 3: choose a variance structure (including random intercept, because that has its own variance separate from and independent of the error term variance: intercept ~ N(0, d^2))
+
+# Step 4: fit the model
+```{r}
+M1.lme=lme(Form,random=~1|Nest,method="REML",data=Owls)
+```
+
+# Step 5: compare new model (fixed terms + random intercept) with old model (fixed terms only)
+
+Both models were estimated with REML and therefore the likelihood ratio test can be used.  The p-value isn't right, because we're testing sigma^2 = 0 or > 0, but fixing it would make it even smaller, so no need.
+
+```{r}
+anova(M.gls,M1.lme)
+```
+The LR test and the AIC both indicate the model with the random intercept is better.
+
+One could, perhaps should, also test a random intercept + slope...
+
+# Step 6: check residuals for homogeneity of variance and independence
+
+Zuur et al. recommend: "before doing anything, ask yourself whether you expect different residual spread per sex or per treatment or over time... blindly following some test statistics may not be wise".  My guesses: per sex, I don't know a reason for that.  Per treatment, maybe - maybe the food-deprived nests are more variable in how hungry they are.  Per time, maybe - maybe nestlings are more variable in how hungry they are early in the night.
+
+```{r}
+E2<-resid(M1.lme,type="normalized")
+F2<-fitted(M1.lme)
+op<-par(mfrow=c(2,2),mar=c(4,4,3,2))
+MyYlab="Residuals"
+
+plot(x=F2,y=E2,xlab="Fitted values",ylab=MyYlab)
+boxplot(E2~SexParent,data=Owls,main="Sex of parent",ylab=MyYlab)
+boxplot(E2~FoodTreatment,data=Owls,main="Food treatment",ylab=MyYlab)
+plot(x=Owls$ArrivalTime,y=E,main="Arrival time",ylab=MyYlab,xlab="Time (hours)")
+par(op)
+```
+No clear violations of homogeneity.  Possible there is with arrival time, but not sure.  Ignore potential independence problems and come back to them later.
+
+# Steps 7 and 8: find optimal fixed structure
+
+First, look at the model with random intercept and all fixed params for significance.  The plan will be to drop the least significant one and refit the model.
+
+```{r}
+M1.lme=lme(Form,random=~1|Nest,method="REML",data=Owls)
+summary(M1.lme)
+```
+Neither interaction term is significant (p=0.72 and 0.71). 
+
+In principle, option 2 for checking significance is anova().  However, the anova(M1.lme) command isn't recommended here because the p-values it'd show would depend on the order of the terms, and in this case specifically of the two interaction terms.
+
+A third option is to use the likelihood ratio test; need to fit the mixed-effect model again with ML to do that. Compare the model with all fixed terms with two models, each dropping one of the (fixed) interaction terms.
+
+```{r}
+M1.Full=lme(Form,random=~1|Nest,method="ML",data=Owls)
+M1.A=update(M1.Full,.~.-SexParent:FoodTreatment)
+M1.B=update(M1.Full,.~.-SexParent:ArrivalTime)
+anova(M1.Full,M1.A)
+anova(M1.Full,M1.B)
+```
+Of these, SexParent:FoodTreatment is less significant.  Drop that one first, then try (one at a time) dropping the FoodTreatment term and the other interaction term.
+```{r}
+Form2<-formula(LogNeg~SexParent+FoodTreatment+SexParent*ArrivalTime)
+M2.Full=lme(Form2, random= ~1| Nest, method = "ML", data = Owls)
+M2.A=update(M2.Full, .~. -FoodTreatment)
+M2.B=update(M2.Full, .~. -SexParent:ArrivalTime)
+anova(M2.Full,M2.A)
+anova(M2.Full,M2.B)
+```
+The SexParent:ArrivalTime term isn't significant, but FoodTreatment is.
+Now try dropping each of the three main (non-interaction) terms one at a time.
+
+```{r}
+Form3 <- formula(LogNeg~SexParent+FoodTreatment+ArrivalTime)
+M3.Full <- lme(Form3, random= ~1| Nest, method = "ML", data = Owls)
+M3.A <- update(M3.Full, .~. -FoodTreatment)
+M3.B <- update(M3.Full, .~. -SexParent)
+M3.C <- update(M3.Full, .~. -ArrivalTime)
+anova(M3.Full,M3.A)
+anova(M3.Full,M3.B)
+anova(M3.Full,M3.C)
+```
+SexParent isn't significant.  Drop it, and now the model only has a random slope for nest, and FoodTreatment and ArrivalTime as fixed terms.  Drop each of the fixed terms in turn.
+
+```{r}
+Form4 <- formula(LogNeg ~ FoodTreatment + ArrivalTime)
+M4.Full <- lme(Form4, random= ~1| Nest, method = "ML", data = Owls)
+M4.A <- update(M4.Full, .~. -FoodTreatment)
+M4.B <- update(M4.Full, .~. -ArrivalTime)
+anova(M4.Full,M4.A)
+anova(M4.Full,M4.B)
+```
+Keep both FoodTreatment and ArrivalTime.  This is our final model we've selected.
+
+# Step 9: refit with REML and validate
+
+```{r}
+M5 <- lme(LogNeg ~ FoodTreatment + ArrivalTime, random= ~1| Nest, method = "REML", data = Owls)
+summary(M5)
+```
+The slope for FoodTreatmentSatiated is -0.175; in other words, nestlings call less if they had more food.  The coefficient for arrival time is -0.03, meaning that later in the night, there's a little less calling by nestlings.
+
+The correlation between observations from the same nest can be calculated as (random intercept variance) / (random intercept variance + residual variance) = .095^2 / (.095^2 + 0.23^2) = 0.146.  This is significant but pretty low.
+
+Now check residuals for homogeneity:
+```{r}
+E2<-resid(M5,type="normalized")
+F2<-fitted(M5)
+op<-par(mfrow=c(2,2),mar=c(4,4,3,2))
+MyYlab="Residuals"
+
+plot(x=F2,y=E2,xlab="Fitted values",ylab=MyYlab)
+boxplot(E2~SexParent,data=Owls,main="Sex of parent",ylab=MyYlab)
+boxplot(E2~FoodTreatment,data=Owls,main="Food treatment",ylab=MyYlab)
+plot(x=Owls$ArrivalTime,y=E,main="Arrival time",ylab=MyYlab,xlab="Time (hours)")
+par(op)
+```
+Zuur et al. conclude "homogeneity seems a fair assumption".
+
+# Step 10: biological discussion
+
+# But wait, there's more: checking independence
+
+We'd assumed independence because there isn't a clear pattern when residuals are plotted against arrival time.  But let's plot residuals against arrival time for each of the four combinations of parent sex and food treatment.
+
+```{r}
+library(lattice)
+
+xyplot(E2~ArrivalTime|SexParent*FoodTreatment,data=Owls,
+  ylab="Residuals",xlab="Arrival time (hours)",
+      panel=function(x,y){
+    panel.grid(h=-1, v= 2)
+    panel.points(x,y,col=1)
+    panel.loess(x,y,span=0.5,col=1,lwd=2)})
+```
+The smoothing line added to the above plots shouldn't show a pattern, and should be a straight line - but it raises some suspicion for Zuur et al.  Check further by fitting an additive mixed model, replacing arrival time and its coefficient with a function of arrival time as a predictor.
+
+```{r}
+library(mgcv)
+M6 <- gamm(LogNeg ~ FoodTreatment + +s(ArrivalTime),
+        random=list(Nest=~1),data=Owls)
+        
+#summary(M6)  # not very informative, need to look at lme & gam components separately
+plot(M6$gam)
+anova(M6$gam)
+summary(M6$gam)
+```
+There are several ways above to look at aspects of the gamm() model  Note that the smoothers in the plot are really not straight lines - i.e. the effect of arrival time is not linear.  In the output of summary(M6$gam), we see the smoother is significant and has 6.9 df, which is a lot more than the 1 a straight line would have.
+#```{r}
+M7 <- gamm(NegPerChick~FoodTreatment+
+       s(ArrivalTime,by=as.numeric(FoodTreatment=="Deprived"))+
+       s(ArrivalTime,by=as.numeric(FoodTreatment=="Satiated")),
+        random=list(Nest=~1),data=Owls)
+
+M8 <- gamm(NegPerChick~FoodTreatment+
+       s(ArrivalTime,by=as.numeric(SexParent=="Female"))+
+       s(ArrivalTime,by=as.numeric(SexParent=="Male")),
+        random=list(Nest=~1),data=Owls)
+
+AIC(M6$lme,M7$lme,M8$lme)
+
+#```
+
+Above are two models with two smoothers each - one per food treatment or one per sex of the parent. N.B., this code gives an error message.  Zuur et al. found that the AIC for the model with one smoother was the lowest anyway.  They concluded based on the smoother for arrival time that there's a lot of nestling negotiation around 23:00 and a second, somewhat smaller peak between 01:00 and 02:00.
+
+---
