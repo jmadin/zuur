@@ -197,6 +197,8 @@ ID <- to make sure we know which observation belongs to which time series
 
 ```{r}
 library(lattice)
+
+xyplot(Birds ~ Time | ID, col = 1)
 ```
 
 Additive model with Gaussian distribution
@@ -210,31 +212,37 @@ weights = varIdent(form =~ 1 | ID)) means: Each time series is allowed to have a
 ```{r}
 
 library(mgcv)
-```
+vf1 <- varIdent(form=~1|ID)
+BM1<-gamm(Birds ~ Rain + ID + s(Time,by=ID),
+      weights=varIdent(form=~1|ID))
 
-# PROBLEM WITH THIS CODE: 
-"Error in MEestimate(lmeSt, grps) : 
-  Singularity in backsolve at level 0, block 1"
- 
-BM1 <- gamm(Birds ~ Rain + ID + s(Time, by = as.numeric(ID == "Stilt.Oahu")) + s(Time, by = as.numeric(ID == "Stilt.Maui")) + s(Time, by = as.numeric(ID == "Coot.Oahu")) + s(Time, by = as.numeric(ID == "Coot.Maui")), 
-weights = varIdent(form =~ 1 | ID)) 
-
-#
 
 summary(BM1$gam)
-
-
+```
 
 PROBLEM DETECTED: The p-values assume INDEPENDENCE and because the data are TIME SERIES, these assumptions may be VIOLATED.
 
 PROBLEM SOLVED: We can easily implement a residual auto-correlation structure.
 
 ```{r}
+BM2<-gamm(Birds~Rain+ID+
+       s(Time,by=ID),
+     correlation=corAR1(form=~Time |ID ),
+     weights=varIdent(form=~1|ID))
+
+BM3<-gamm(Birds~Rain*ID+
+       s(Time,by=ID),
+     correlation=corAR1(form=~Time |ID ),
+     weights=varIdent(form=~1|ID))
+
+
+anova(BM2$gam)
+summary(BM2)
+
+summary(BM3$gam)
+AIC(BM1$lme, BM2$lme)
 ```
 
-BM2 <- gamm(Birds ~ Rain + ID + s(Time, by = as.numeric(ID == "Stilt.Oahu")) + s(Time, by = as.numeric(ID == "Stilt.Maui")) + s(Time, by = as.numeric(ID == "Coot.Oahu")) + s(Time, by = as.numeric(ID == "Coot.Maui")), correlation = corAR1(form =~ Time | ID ), weights = varIdent(form =~ 1 | ID))
-
-AIC(BM1$lme, BM2$lme)
 
 New piece -> correlation = corAR1 (form = ∼Time | ID). 
 
@@ -246,9 +254,9 @@ The AIC for the model without auto-correlation is 2362.14 and with auto-correlat
 
 aNOVA:indicate that the rainfall effect is negative and highly significant (p < 0.001) 
 
-
+```{r}
 anova(BM2$gam)
-
+```
 
 The Oahu time series have a significant long-term trend and rainfall effect, whereas the Maui time series are only affected by rainfall. 
 
@@ -256,28 +264,29 @@ The smoothers in panels B and D are not significant. Further model improvements 
 
 The long-term trend for stilts on Oahu (panel A) is linear, but the coots on Oahu show a non-linear trend over time. Abundances are increasing from the early 1970s onwards.
 
-
+```{r}
 par (mfrow = c (2,2))
 plot(BM2$gam, scale = FALSE)
-
+```
 
 The normalised residuals are plotted versus time. 
 The stilt residuals at Maui show some evidence of heterogeneity over time. It may be an option to use the varComb option to allow for heterogeneity per time series (as we have done here) but also along time.
 
 + We leave this as an exercise for the reader. If you do attempt to apply such a model, it would make sense to remove the square root transformation. 
 
-E2 <- resid(BM2$lme, type = "normalized") > EAll <- vector(length = length(Birds))
+
+```{r}
+library(lattice)
+E2 <- resid(BM2$lme, type = "normalized")
+EAll <- vector(length = length(Birds))
 
 EAll[] <- NA
 
 I1 <- !is.na(Birds)
 
 EAll[I1] <- E2
-
-```{r}
-library(lattice)
+xyplot(EAll ~ Time | ID, col = 1, ylab = "Residuals")
 ```
-problem with this plot: xyplot(EAll ~ Time | ID, col = 1, ylab = "Residuals")
 
 The model we applied above assumes that residuals are normally distributed with a variance that differs per time series and allows for auto-correlation within a time series. But, we also assume there is no correlation of residuals for different time series. This assumption could be violated if birds on one island are affecting those on other islands. Or there may be other biological reasons why the residual patterns of different time series are correlated. Whatever the biological reason, we need to verify this assumption. This is done by calculating the correlation coefficients between the four residual time series. If these correlation coefficients are reasonably small, we can assume independence between residuals of different time series. 
 
@@ -311,7 +320,7 @@ The three options are
 
 If more than one correlation has a high values:
 
-(4) should not be considered. You could try programming your own correlation structure allowing for spatial and temporal correlation.
+(3) should not be considered. You could try programming your own correlation structure allowing for spatial and temporal correlation.
 
 
 __________
