@@ -1,0 +1,388 @@
+---
+title: "Chapter 6 - Violation of Independence - part I"
+output: html_document
+---
+
+  This chapter explains:
+ 
+ 1- How correlation structures can be added to the linear regression and additive model
+ 
+ 2 -Extended mixed effects models with a temporal correlation structure
+  
+  *First section: one species - linear regression model extended with residual temporal correlation structure 
+ 
+  *Second section: same approach but Multivariate time series
+ 
+  *Third section: Owl example
+  
+___
+6.1 Temporal Correlation and Linear Regression
+
+Data: abundance of birds measured at three islands (hawaaii- its a sign hehe)
+Temporal dataseries:1956-2003 
+
+How to deal with violation of independence:
+Time series: Moorhen abundance on Kauai
+
+A time series plot sqrt-root-transformed data (but not necessary according to chapter 4).
+
+```{r}
+Hawaii <- read.delim("data/Hawaii.txt", header = TRUE)
+head(Hawaii)
+Hawaii$Birds <- sqrt(Hawaii$Moorhen.Kauai)
+plot(Hawaii$Year, Hawaii$Birds, xlab= "Year", ylab= "Moorhen abundance on Kauai")
+```
+
+The (transformed) abundance of birds is modelled as a function of annual rainfall and the variable Year (representing a long-term trend) using linear regression.
+
+model 1 -> Birdss =α+β1 ×Rainfalls +β2 ×Years +εs
+
+additive model (fixed factors) -> Birdss = α + f1(Rainfalls ) + f2(Years ) + εs
+
+The advantage of the smoothers is that they allow for a non-linear trend over time and non-linear rainfall effects. 
+Whichever model we use, the underlying assumption is that the residuals are independently normally distributed with mean 0 and variance σ2. 
+
+The underlying principle is rather simple: we model the auto-correlation between residuals of different time points by introducing a function h(.):
+ 
+cor(εs,εt) =1 ifs = t
+            h(εs , εt ,ρ) else
+            
+The function h(.) is called the correlation function, and it takes values between –1 and 1.We assume that the correlation between the residuals εs and εt only depends on their time difference s – t. Hence, the correlation between εs and εt is assumed to be the same as that between εs+1 and εt+1, between εs+2 and εt+2, etc. The task of the analyst is to find the OPTIMAL PARAMETERISATION  of the function h(.).
+
+Before applying any model with a residual auto-correlation structure, we first apply the linear model without auto-correlation so that we have a reference point. 
+obs: In a preliminary analysis (not presented here), the cross-validation in the additive model gave one degree of freedom for each smoother, indicating that parametric models are preferred over smoothing models for this time series.
+
+We used the gls function without any correlation or weights option, and as a result it fits an ordinary linear regression model. 
+```{r}
+
+library(nlme)
+
+M0 <- gls(Birds ~ Rainfall + Year, 
+          na.action = na.omit, data = Hawaii) 
+summary(M0)
+```  
+The effect of rainfall is not significant, but there is a significant increase in birds over time. The problem is that we cannot trust these p-values as we may be violating the independence assumption. The first choice to test this is to extract the standardised residuals and plot them against time (Fig. 6.2). Note that there is a CLEAR PATTERN IN THE RESIDUALS.
+```{r}
+plot(M0)
+```
+
+A more formal visualisation tool to detect patterns is the auto-correlation function (ACF). The value of the ACF at different time lags gives an indication whether there is any auto-correlation in the data. 
+Auto-correlation plot for the residuals obtained by applying linear regression on the Bird time series. 
+
+Violation of independence:various time lags have a significant correlation -? residual correlation (general pattern of decreasing values for the first 5 years?). As a result, we cannot assume that the F-statistic follows an F-distribution and the t-statistic a t-distribution.
+
+```{r}
+E <- residuals(M0, type = "normalized")
+I1 <- !is.na(Hawaii$Birds)
+Efull <- vector(length = length(Hawaii$Birds))
+Efull <- NA
+Efull[I1] <- E
+acf(Efull, na.action = na.pass,
+main = "Auto-correlation plot for residuals")
+```
+  
+Alternative approach: Include an auto-correlation structure into the model. Then compare the models with and without an auto-correlation structure using the AIC, BIC, or if the models are nested, a likelihood ratio test.
+
+Important: Do not spend too much time trying to find the optimal residual auto-correlation structure. It is more important to model the correlation structure in a reasonable and meaningful way rather than to model the correlation structure perfectly. Differences in p-values for the F- and t-statistics obtained by using similar correlation structures tend to differ only marginally.
+
+The easiest auto-correlation structure is the so-called compound symmetry structure. It assumes that whatever the distance in time between two obser- vations, their residual correlation is the same. This correlation structure is often too simplistic for time series, but may still be useful for short time series.
+
+```{r}
+
+M1 <- gls(Birds ~ Rainfall + Year, na.action = na.omit, data = Hawaii, correlation = corCompSymm(form =~ Year))
+summary(M1)
+
+```
+
+Residual correlatio sructure is implemented using correlation option in the gls function. 
+
+Arguments: 
+corCompSymm -> the compound symmetry auto-correlation structure.
+form -> used to tell the order of the data is determined by the temporal variable (in this case, Year)
+
+However: Comparing models: give AIC, BIC, ρ = 0, and the estimated regression parameters and p-values are the same as for the ordinary linear regression model. So, we have made no improvements in the model.
+
+```{r}
+
+library(MASS)
+
+AIC(M0, M1)
+BIC(M0, M1)
+
+```
+
+____
+The next structure we discuss is the AR-1 auto-correlation. This cryptic notation stands for an AUTO-REGRESSIVE MODEL OF ORDER 1. It models the residual at time "s"" as a function of the residual of time "s – 1"" along with noise.
+The following code implements the AR-1 correlation structure.
+Argument corAR1 -> position of the observations over time MATTERS
+na.action -> required due missing values
+
+```{r}
+M2 <- gls(Birds ~ Rainfall + Year, na.action = na.omit, data = Hawaii, correlation = corAR1(form =~ Year))
+
+summary(M2)
+
+```  
+
+
+The parameter ρ is equal to 0.77. This means that residuals separated by one year have a correlation of 0.77; by two years it is 0.772 = 0.59. This is rather high, but seems to be in line with the pattern for the first few years in the auto-correlation function. 
+
+```{r}
+AIC(M1, M2)
+BIC(M1, M2)
+
+```
+The AIC indicates that the AR-1 correlation structure is a considerable model improvement compared to the linear regression model. In general, you would expect ρ to be positive as values at any particular point in time are positively related to preceding time points. Occasionally, you find a negative ρ. Plausible explanations are either the model is missing an important explanatory variable or the abundances go from high values in one year to low values in the next year.
+
+___
+6.1.1 ARMA (auto-regressive moving average) Error Structures
+
+ARMA model has two parameters defining its order: the number of auto-regressive parameters (p) and the number of moving average parameters (q).The residuals at time s are modelled as a function of the residuals of the p previous time points and white noise. 
+All these p and q parameters have to be estimated from the data, and using values of p or q LARGER THAN 2 AND 3 tend to give error messages related to convergence problems. The ARMA(p, q) can be seen as a BLACK BOX (scary) to fix residual correlation problems. 
+The correlation structure can also be used for generalised additive models, and it is also possible to have a model with residual correlation and/or heterogeneity structures.
+
+
+```{r}
+cs1 <- corARMA(c(0.2), p = 1, q = 0)
+cs2 <- corARMA(c(0.3, -0.3), p = 2, q = 0)
+
+M3arma1 <-gls(Birds ~ Rainfall + Year, na.action = na.omit,
+correlation = cs1, data = Hawaii)
+
+M3arma2 <- gls(Birds ~ Rainfall + Year, na.action = na.omit,
+correlation = cs2, data = Hawaii)
+
+AIC(M3arma1, M3arma2)
+```
+
+Finding the optimal model in terms of the residual correlation structure is then a matter of applying the model with different values of p and q.
+
+Because not all the models are nested, we cannot apply a likelihood ratio test and have therefore based our model selection on the AIC. The lowest AICs were obtained by the ARMA(2,0) and ARMA(2,3) models.
+
+We selected the ARMA(2,0) model as it is considerably LESS COMPLEX than the ARMA(2,3) model.
+(So, going from no residual correlation to an AR-1 structure gave a large improvement, while the more complicated structures gave only a marginal
+improvement)
+
+φ values: 
+The estimated auto-regressive parameters of the ARMA(2,0) model were φ1 = 0.99 and φ2 = –0.35. The value for φ1 close to 1 may indicate a more serious problem of the residuals being non-stationary (non-constant mean or vari- ance). 
+
+Note that the auto-correlation function in Fig. 6.3 becomes positive again for larger time lags. This suggests that an error structure that allows for a SINUSOIDAL PATTERN  may be more appropriate.
+
+_______
+6.2 Linear Regression Model and Multivariate Time Series
+
+Data : 2 species in 2 islands (Oahu and Mauiu)
+Model: Annual rainfall and year as explanatory variables to model bird abundances
+
+Preliminary analyses suggested a linear rainfall effect that was the same for all four time series and a non-linear trend over time.
+                Birdsis = αi + β × Rainfallis + fi (Years ) + εis
+                
+We treat the time series for the two species and two islands as different time series. The intercept αi allows for a different mean value per time series. An extra motivation to use NO rainfall–species or rainfall–island interaction is that "some intermediate models had numerical problems with the interaction term".Years is the year and fi(Years) is a smoother for each species–island combination. If we remove the index i, then all four time series are assumed to follow the same trend.
+
+rep command: Stack the variables Year and Rainfall
+
+```{r}
+Birds <- c(Hawaii$Stilt.Oahu, Hawaii$Stilt.Maui,
+              Hawaii$Coot.Oahu, Hawaii$Coot.Maui)
+Time <- rep(Hawaii$Year, 4)
+Rain <- rep(Hawaii$Rainfall, 4)
+ID <- factor(rep(c("Stilt.Oahu", "Stilt.Maui",
+"Coot.Oahu", "Coot.Maui"), each = length(Hawaii$Year)))
+```
+
+The range of the y-axes in the lattice plot immediately indicates that some species have considerably more variation, indicating violation of homogeneity. The solution is to allow for different spread per time series. 
+
+ID <- to make sure we know which observation belongs to which time series
+(problems to run the code: xyplot(Birds ~ Time | ID, col = 1))
+
+```{r}
+library(lattice)
+
+xyplot(Birds ~ Time | ID, col = 1)
+```
+
+Additive model with Gaussian distribution
+
+weights = varIdent(form =~ 1 | ID)) means: Each time series is allowed to have a different residual spread. 
+
+(The same model could have been fitted with the gam command instead of the gamm, but our choice allows for a comparison with what is to come.)
+
+
+
+```{r}
+
+library(mgcv)
+vf1 <- varIdent(form=~1|ID)
+BM1<-gamm(Birds ~ Rain + ID + s(Time,by=ID),
+      weights=varIdent(form=~1|ID))
+
+
+summary(BM1$gam)
+```
+
+PROBLEM DETECTED: The p-values assume INDEPENDENCE and because the data are TIME SERIES, these assumptions may be VIOLATED.
+
+PROBLEM SOLVED: We can easily implement a residual auto-correlation structure.
+
+```{r}
+BM2<-gamm(Birds~Rain+ID+
+       s(Time,by=ID),
+     correlation=corAR1(form=~Time |ID ),
+     weights=varIdent(form=~1|ID))
+
+BM3<-gamm(Birds~Rain*ID+
+       s(Time,by=ID),
+     correlation=corAR1(form=~Time |ID ),
+     weights=varIdent(form=~1|ID))
+
+
+anova(BM2$gam)
+summary(BM2)
+
+summary(BM3$gam)
+AIC(BM1$lme, BM2$lme)
+```
+
+
+New piece -> correlation = corAR1 (form = ∼Time | ID). 
+
+"form" option specifies that the temporal order of the data is specified by the variable Time, and the time series are NESTED. 
+
+The auto-correlation is therefore applied at the deepest level (on each individual time series), and we get one ρ for all four time series. 
+
+The AIC for the model without auto-correlation is 2362.14 and with auto-correlation it is 2351.59, which is a worthwhile reduction. 
+
+aNOVA:indicate that the rainfall effect is negative and highly significant (p < 0.001) 
+
+```{r}
+anova(BM2$gam)
+```
+
+The Oahu time series have a significant long-term trend and rainfall effect, whereas the Maui time series are only affected by rainfall. 
+
+The smoothers in panels B and D are not significant. Further model improvements can be obtained by dropping these two smoothers from the model.
+
+The long-term trend for stilts on Oahu (panel A) is linear, but the coots on Oahu show a non-linear trend over time. Abundances are increasing from the early 1970s onwards.
+
+```{r}
+par (mfrow = c (2,2))
+plot(BM2$gam, scale = FALSE)
+```
+
+The normalised residuals are plotted versus time. 
+The stilt residuals at Maui show some evidence of heterogeneity over time. It may be an option to use the varComb option to allow for heterogeneity per time series (as we have done here) but also along time.
+
++ We leave this as an exercise for the reader. If you do attempt to apply such a model, it would make sense to remove the square root transformation. 
+
+
+```{r}
+library(lattice)
+E2 <- resid(BM2$lme, type = "normalized")
+EAll <- vector(length = length(Birds))
+
+EAll[] <- NA
+
+I1 <- !is.na(Birds)
+
+EAll[I1] <- E2
+xyplot(EAll ~ Time | ID, col = 1, ylab = "Residuals")
+```
+
+The model we applied above assumes that residuals are normally distributed with a variance that differs per time series and allows for auto-correlation within a time series. But, we also assume there is no correlation of residuals for different time series. This assumption could be violated if birds on one island are affecting those on other islands. Or there may be other biological reasons why the residual patterns of different time series are correlated. Whatever the biological reason, we need to verify this assumption. This is done by calculating the correlation coefficients between the four residual time series. If these correlation coefficients are reasonably small, we can assume independence between residuals of different time series. 
+
+The following code extracts the residuals per time series, calculates an auto-correlation function, and a 4-by-4 correlation matrix
+
+
+E1 <- EAll[ID == "Stilt.Oahu"]
+E2 <- EAll[ID == "Stilt.Maui"]
+E3 <- EAll[ID == "Coot.Oahu"]
+E4 <- EAll[ID == "Coot.Maui"]
+
+par(mfrow = c(2, 2))
+
+acf(E1, na.action = na.pass)
+acf(E2, na.action = na.pass)
+acf(E3,na.action = na.pass)
+acf(E4, na.action = na.pass)
+D <- cbind(E1, E2, E3, E4)
+
+cor(D, use = "pairwise.complete.obs")
+
+
+All correlation coefficients are smaller than 0.2, except for the correlation coefficient between stilts and coots on Maui (r = 0.46). This may indicate that the model is MISSING an important covariate for the Maui time series. 
+
+The three options are 
+
+(1) find the missing covariate and put it into the model 
+
+(2) extend the residual correlation structure by allowing for the correlation, 
+(3) ignore the problem because it is only one out of the six correlations, and all p-values in the model were rather small (so it may have little influence on the conclusions). 
+
+If more than one correlation has a high values:
+
+(3) should not be considered. You could try programming your own correlation structure allowing for spatial and temporal correlation.
+
+
+__________
+6.3 Owl Sibling Negotiation Data
+
+Continuation Chapter 5: 
+
+```{r}
+Owls <- read.delim("data/Owls.txt", header = TRUE)
+
+library(nlme)
+
+Owls$LogNeg <- log10(Owls$NegPerChick + 1)
+Form <- formula(LogNeg ~ SexParent * FoodTreatment + SexParent * ArrivalTime)
+
+M2.gls <- gls(Form, method = "REML", data = Owls, correlation = corCompSymm(form =~ 1 | Nest))
+
+summary(M2.gls)
+
+```
+The summary command gives an estimated cor- relation of 0.138. Hence, the correlation between any two observations from the same nest i is given by
+cor(εis,εit) = 0.138.
+
+It is important to realise that both random intercept and compound correlation models assume that the correlation coefficient between any two observations from the same nest are equal, whether the time difference is 5 minutes or 5 hours
+
+Based on the biological knowledge of these owls, it is more natural to assume that observa- tions made close to each other in time are more similar than those separated further in time. 
+
+This sounds like the auto-regressive correlation structure of order 1 (tcharan!)
+
+PROBLEM DETECTED: 
+
+1) The experiment was carried out on two nights, and the food treatment changed.we have to be very careful where we place the auto-regressive correlation structure. It should be within a nest on a certain night. The random intercept and the compound correlation models place the correlation within the same nest, irrespective of the night.
+
+2) observations are not regularly spaced. Let us assume the owls indeed chose the times, and therefore, we consider the longitudinal data as regularly spaced. This basically means that we assume that distances (along the time axis) between the vertical lines in Fig. 6.7 are all the same.
+
+We can consider the visits at a nest on a particular night as regular spaced and apply the models with an auto-regressive correlation structure, e.g. the corAR1 structure.
+
+The variables FoodTreatment and Nest identify the group of observa- tions from the same night, and the correlation is applied within this group.
+
+The model with the auto-regressive correlation structure assumes that observa- tions from different nests are independent and also that the observations from the same nest on two different nights are independent.
+
+```{r}
+library(lattice)
+
+xyplot(LogNeg ~ ArrivalTime | Nest, data = Owls,
+type = "h", col = 1, main = "Deprived", subset = (FoodTreatment == "Deprived"))
+
+M3.gls <- gls(Form, method = "REML", data = Owls,
+correlation = corAR1(form =~ 1 | FoodTreatment))
+
+summary(M3.gls) 
+```
+
+Summary shows that the estimated auto-correlation is 0.418, which is relatively high.
+WHAT TO DO?
+
+The whole 10-step protocol approach can now be applied again:
+(1)  chose the optimal random structure
+(2) then the optimal fixed structure. 
+
+ps:You can also choose to model arrival time as a smoother(section 5.8) This gives a GAM with auto-correlation.
+
+
+theend
+
