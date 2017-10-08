@@ -1,0 +1,418 @@
+# Chapter 8: Meet the Exponential Family
+
+So far:
+
+- Linear regression
+- Different variances
+- Nested data
+- Temporal correlation
+- Spatial correlation
+
+Next:
+
+- Generalised linear modelling (GLM)
+
+Key difference?
+
+- Linear regression -> Normal (or: Gaussian) distribution. It is important to realise that this distribution applies for the response variable. 
+- GLM is extension of linear modelling in the sense that a non-Gaussian distribution for the response variable is used and the relationship (or link) between the response variable and the explanatory variables may be different. 
+
+This chapter:
+
+- We focus on the distribution
+
+Many reasons:
+
+- Absence–presence data are (generally) coded as 1 and 0
+- Proportional data are always between 0 and 100%
+- Count data are always non-negative
+
+Bernoulli and binomial distributions, Poisson and negative binomial distributions, etc.
+
+**What are these distributions, how do they look like, and when would you use them?**
+
+# The Normal Distribution
+
+$$f(y_i;\mu,\sigma) = \frac{1}{(\sigma\sqrt{2 \pi})} e^{-(\frac{(y_i - \mu)^2}{2 \sigma^2})}$$
+The distribution function gives the probability that bird $i$ has a weight $y_i$, and $\mu$ and $\sigma^2$ are the population mean and variance, respectively.
+
+The variable y can take any value between −∞ and ∞.
+
+In linear regression, we model the expected values $μ_i$ (the index i refers to observations or cases) as a function of the explanatory variables, and this function contains unknown regression parameters (intercept and slopes).
+
+```{r}
+source("R/HighstatLibV10.R")
+
+data(Sparrows)
+op <- par(mfrow = c(2, 2))
+hist(Sparrows$wt, nclass = 15, xlab = "Weight", main = "Observed data")
+hist(Sparrows$wt, nclass = 15, xlab = "Weight", main = "Observed data", freq = FALSE)
+Y <- rnorm(1281, mean = mean(Sparrows$wt),
+sd = sd(Sparrows$wt))
+hist(Y, nclass = 15, main = "Simulated data",
+xlab = "Weight")
+X <-seq(from = 0,to = 30,length = 200)
+Y <- dnorm(X, mean = mean(Sparrows$wt), sd = sd(Sparrows$wt))
+plot(X, Y, type = "l", xlab = "Weight", ylab = "Probablities", ylim = c(0, 0.25), xlim = c(0, 30), main = "Normal density curve")
+par(op)
+
+```
+
+In this case, the histogram of the observed weight data (panel B) indicates that the Normal distribution may be a reasonable starting point. 
+
+But what do you do if it is not (or if you do not agree with our statement)? 
+
+1. Apply a data transformation, but this will also change the relationship between the response and explanatory variables
+2. Do nothing and hope that the residuals of the model are normally distributed (and the explanatory variables cause the non-normality)
+3. Choose a different distribution and the type of data determines which distribution is the most appropriate
+
+# The Poisson Distribution
+
+$$f(y;\mu) = \frac{\mu^y {e^{ - \mu }}}{{y!}}$$
+Where $y \geq 0$, $y$ is an integer.
+
+- This formula specifies the probability of Y with a mean μ. note has to be an integer, so a discrete distribution. 
+- Once we know μ, we can calculate the probabilities for different y values. 
+- Note that μ can be a non-integer, but the ys have to be non-negative and integers
+- Other characteristics of the Poisson distribution are that P(Y < 0) = 0 and the **mean is the variance**
+- This is also the reason that the probability distributions become wider and wider for larger mean values. 
+
+```{r}
+x1 <- 0:10; Y1 <- dpois(x1, lambda = 3)
+x2 <- 0:10; Y2 <- dpois(x2, lambda = 5)
+x3 <- 0:40; Y3 <- dpois(x3, lambda = 10)
+x4 <- 50:150; Y4 <- dpois(x4, lambda = 100) 
+XLab <- "Y values"; YLab <- "Probabilities" 
+op <- par(mfrow = c(2, 2))
+plot(x1, Y1, type = "h", xlab = XLab, ylab = YLab, main = "Poisson with mean 3")
+plot(x2, Y2, type = "h", xlab = XLab, ylab = YLab, main = "Poisson with mean 5")
+plot(x3, Y3, type = "h", xlab = XLab, ylab = YLab, main = "Poisson with mean 10")
+plot(x4, Y4, type = "h", xlab = XLab, ylab = YLab, main = "Poisson with mean 100")
+par(op)
+```
+
+- The Poisson distribution is typically used for count data
+- Main advantages are (1) that the probability for negative values is 0 and (2) that the mean variance relationship allows for heterogeneity. 
+- However, in ecology, it is quite common to have data for which the variance is even larger than the mean, and this is called **overdispersion**. 
+- Depending how much larger the variance is compared to the mean, one option is to use the correction for overdispersion within the Poisson GLM, and this is discussed in Chapter 9. Alternatively, we may have to choose a different distribution, e.g. the negative binomial distribution, which is discussed in the next section.
+
+# The Negative Binomial Distribution
+
+- Another discrete distribution
+- Combination of two distributions, giving a combined Poisson-gamma distribution
+- This means we first assume that the Ys are Poisson distributed with the mean μ assumed to follow a gamma distribution
+- With some mathematical manipulation, we end up with the negative binomial distribution for Y. 
+
+**Equation in book chapter**
+
+The mean and variance of Y are given by:
+
+$$E(Y)=\mu$$
+
+$$var(Y)=\mu + \frac{\mu^2}{k}$$
+
+- We have overdispersion if the variance is larger than the mean
+- second term in the variance of Y determines the amount of overdispersion
+- If k is large (relative to μ2), the term μ2/k approximates 0, and the variance of Y is μ; in such cases the negative binomial converges to the Poisson distribution. In this case, you might as well use the Poisson distribution. The smaller k, the larger the overdispersion.
+
+- It is important to realise that this distribution is for discrete (integers) and non-negative data. 
+- Memorising the complicated formulation of the density function is not needed; the computer can calculate the Γ terms. 
+- All you need to remember is that with this distribution, the mean of Y is equal to $\mu$ and the variance is $\mu + \frac{\mu^2}{k}$.
+
+```{r}
+
+ mu1B=1 ; k1B=0.1
+ mu1C=1 ; k1C=1
+ mu1D=1 ; k1D=100000
+
+ mu2B=10 ; k2B=0.1
+ mu2C=10 ; k2C=1
+ mu2D=10 ; k2D=100000
+
+ mu3B=100 ; k3B=0.1
+ mu3C=100 ; k3C=1
+ mu3D=100 ; k3D=100000
+
+
+x1B<-0:10; Y12<-dnbinom(x1B,mu=mu1B,size=k1B)
+x1C<-0:10; Y13<-dnbinom(x1C,mu=mu1C,size=k1C)
+x1D<-0:10; Y14<-dnbinom(x1D,mu=mu1D,size=k1D)
+
+x2B<-0:20; Y22<-dnbinom(x2B,mu=mu2B,size=k2B)
+x2C<-0:20; Y23<-dnbinom(x2C,mu=mu2C,size=k2C)
+x2D<-0:20; Y24<-dnbinom(x2D,mu=mu2D,size=k2D)
+
+
+x3B<-0:200; Y32<-dnbinom(x3B,mu=mu3B,size=k3B)
+x3C<-0:200; Y33<-dnbinom(x3C,mu=mu3C,size=k3C)
+x3D<-0:200; Y34<-dnbinom(x3D,mu=mu3D,size=k3D)
+
+
+par(mfrow=c(3,3))
+Xlab="Y values"
+Ylab="Probabilities"
+plot(x1B,Y12,type="h",xlab=Xlab,ylab=Ylab,main=paste("NB(",mu1B,",",k1B,")"))
+plot(x1C,Y13,type="h",xlab=Xlab,ylab=Ylab,main=paste("NB(",mu1C,",",k1C,")"))
+plot(x1D,Y14,type="h",xlab=Xlab,ylab=Ylab,main=paste("NB(",mu1D,",",k1D,")"))
+
+
+plot(x2B,Y22,type="h",xlab=Xlab,ylab=Ylab,main=paste("NB(",mu2B,",",k2B,")"))
+plot(x2C,Y23,type="h",xlab=Xlab,ylab=Ylab,main=paste("NB(",mu2C,",",k2C,")"))
+plot(x2D,Y24,type="h",xlab=Xlab,ylab=Ylab,main=paste("NB(",mu2D,",",k2D,")"))
+
+
+plot(x3B,Y32,type="h",xlab=Xlab,ylab=Ylab,main=paste("NB(",mu3B,",",k3B,")"))
+plot(x3C,Y33,type="h",xlab=Xlab,ylab=Ylab,main=paste("NB(",mu3C,",",k3C,")"))
+plot(x3D,Y34,type="h",xlab=Xlab,ylab=Ylab,main=paste("NB(",mu3D,",",k3D,")"))
+
+```
+
+- If we set k = 1 in the negative binomial distribution, then the resulting distribution is called the **geometric distribution**. 
+- Its mean and variance are defined by:
+
+$$E(Y)=\mu$$
+
+$$var(Y)=\mu + \mu^2$$
+- the variance increases as a quadratic function of the mean
+- As with the Poisson distribution, observations of the response variables with the value of zero are allowed in the negative binomial and the geometric distribution. 
+- Most software will not have a separate function for the geometric distribution; just set the parameter k in the software for a negative binomial equal to 1.
+
+- Returning to the negative binomial probability function, note that for a small mean μ and large overdispersion (small k), the value of 0 has by far the highest probability.
+
+# The Gamme Distribution
+
+- The gamma distribution can be used for a continuous response variable Y that has positive values (Y > 0)
+- **Equation not shown**
+- The mean and variance of Y are:
+
+$$E(Y)=\mu$$
+
+$$var(Y)=\frac{\mu^2}{\nu}$$
+- The dispersion is determined by v–1; a small value of v (relative to μ2) implies that the spread in the data is large
+
+```{r}
+ mu1B=2 ; v1B=0.01
+ mu1C=2 ; v1C=1
+ mu1D=2 ; v1D=2
+
+ mu2B=10 ; v2B=0.1
+ mu2C=10 ; v2C=1
+ mu2D=0.5 ; v2D=50
+
+x1B<-seq(0, 10, 0.01); Y12<-dgamma(x1B,shape=v1B,scale=mu1B/v1B)
+x1C<-seq(0, 10, 0.01); Y13<-dgamma(x1C,shape=v1C,scale=mu1C/v1C)
+x1D<-seq(0, 10, 0.01); Y14<-dgamma(x1D,shape=v1D,scale=mu1D/v1D)
+
+x2B<-seq(0, 20, 0.01); Y22<-dgamma(x2B,shape=v2B,rate=mu2B/v2B)
+x2C<-seq(0, 20, 0.01); Y23<-dgamma(x2C,shape=v2C,rate=mu2C/v2C)
+x2D<-seq(0, 20, 0.01); Y24<-dgamma(x2D,shape=v2D,rate=mu2D/v2D)
+
+
+par(mfrow=c(2,3))
+Xlab="Y values"
+Ylab="Probabilities"
+plot(x1B,Y12,type="l",xlab=Xlab,ylab=Ylab,main=paste("Gamma (",mu1B,",",v1B,")"))
+plot(x1C,Y13,type="l",xlab=Xlab,ylab=Ylab,main=paste("Gamma (",mu1C,",",v1C,")"))
+plot(x1D,Y14,type="l",xlab=Xlab,ylab=Ylab,main=paste("Gamma (",mu1D,",",v1D,")"))
+
+plot(x2B,Y22,type="l",xlab=Xlab,ylab=Ylab,main=paste("Gamma (",mu2B,",",v2B,")"))
+plot(x2C,Y23,type="l",xlab=Xlab,ylab=Ylab,main=paste("Gamma (",mu2C,",",v2C,")"))
+plot(x2D,Y24,type="l",xlab=Xlab,ylab=Ylab,main=paste("Gamma (",mu2D,",",v2D,")"))
+
+```
+
+
+# The Bernoulli and Binomial Distributions
+
+- Often introduced as the distribution that is used for tossing a coin
+- Toss it 20 times
+- How many heads do you expect? 
+- The possible values that you can get are from 0 to 20
+- Most likely value is 10 heads
+- Using the binomial distribution, we can say how likely it is that you get 0, 1, 2, ..., 19 or 20 heads
+
+A binomial distribution is defined as follows:
+
+- We have N independent and iden tical trials, each with probability P(Yi = 1) = π of success, and probability P(Yi = 0) = 1 – π on failure
+- The labels *success* and *failure* are used for the outcomes of 1 and 0 of the experiment. 
+- The label *success* can be thought of P(Yi = head), and *failure* can be P(Yi = tail). 
+- The term independent means that all tosses are unrelated
+- Identical means that each toss has the same probability of success
+
+Under these assumptions, the density function is given by:
+
+$$f(y;\pi) = {{N}\choose{y}} \cdot \pi^y \cdot (1-\pi)^{N-y}$$
+The probability for each value of y between 0 and 20 for the tossing example can be calculated with this probability function. 
+
+```{r}
+Xlab="Y values"
+Ylab="Probabilities"
+
+n11<-20; x11<-1:n11; p11<-0.2
+n12<-20; x12<-1:n12; p12<-0.5
+n13<-20; x13<-1:n13; p13<-0.7
+
+n21<-10; x21<-1:n21; p21<-0.2
+n22<-10; x22<-1:n22; p22<-0.5
+n23<-10; x23<-1:n23; p23<-0.7
+
+
+n31<-100; x31<-1:n31; p31<-0.2
+n32<-100; x32<-1:n32; p32<-0.5
+n33<-100; x33<-1:n33; p33<-0.7
+
+
+prop11<-dbinom(x11, size=n11, prob=p11)
+prop12<-dbinom(x12, size=n12, prob=p12)
+prop13<-dbinom(x13, size=n13, prob=p13)
+
+
+prop21<-dbinom(x21, size=n21, prob=p21)
+prop22<-dbinom(x22, size=n22, prob=p22)
+prop23<-dbinom(x23, size=n23, prob=p23)
+
+
+prop31<-dbinom(x31, size=n31, prob=p31)
+prop32<-dbinom(x32, size=n32, prob=p32)
+prop33<-dbinom(x33, size=n33, prob=p33)
+
+
+par(mfrow=c(3,3))
+
+
+plot(x21,prop21,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(",p21,",",n21,")"))
+plot(x22,prop22,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(",p22,",",n22,")"))
+plot(x23,prop23,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(",p23,",",n23,")"))
+
+plot(x11,prop11,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(",p11,",",n11,")"))
+plot(x12,prop12,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(",p12,",",n12,")"))
+plot(x13,prop13,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(",p13,",",n13,")"))
+
+
+plot(x31,prop31,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(",p31,",",n31,")"))
+plot(x32,prop32,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(",p32,",",n32,")"))
+plot(x33,prop33,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(",p33,",",n33,")"))
+
+```
+
+The mean and variance of a Binomial distribution are given by:
+
+$$E(Y)=N \cdot \pi$$
+
+$$var(Y)=N \cdot \pi \cdot (1-\pi)$$
+
+- So, if you know that the probability of tossing a head is 0.5 and toss a coin 20 times, then the answer to the question that we started this section with is 20 × 0.5 = 10 heads
+
+Application:
+- deer farm and sample N animals for the presence and absence of a particular disease
+- presence or absence of koalas at particular sites
+- badger activity (yes or no) around farms
+- presence and absence of flat fish at 62 sites in an estuary
+
+
+### The Bernoulli distribution
+
+- A Bernoulli distribution is obtained if N = 1; hence, we only toss once or we only sample one animal on the farm
+- Four Bernoulli distributions with π = 0.2, π = 0.5,π = 0.7,and π = 1 are given below.
+- Note that we only get a value of the probabilities at 0 (failure) and 1 (success).
+- In general, we do not make a distinction between a binomial and Bernoulli dis tribution and use the notation B(π , N) for both, and N = 1 automatically implies the Bernoulli distribution.
+
+```{r}
+par(mfrow=c(2,2))
+prop11<-dbinom(0:1, size=1, prob=0.2)
+plot(0:1,prop11,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(0.2,1)"),ylim=c(0,1))
+
+
+prop11<-dbinom(0:1, size=1, prob=0.5)
+plot(0:1,prop11,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(0.5,1)"),ylim=c(0,1))
+
+
+prop11<-dbinom(0:1, size=1, prob=0.7)
+plot(0:1,prop11,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(0.7,1)"),ylim=c(0,1))
+
+prop11<-dbinom(0:1, size=1, prob=1)
+plot(0:1,prop11,type="h",xlab=Xlab,ylab=Ylab,main=paste("B(1,1)"),ylim=c(0,1))
+
+```
+
+# The Natural Exponential Family
+
+So far, we have discussed the Normal, Poisson, negative binomial, gamma, binomial, and Bernoulli distributions. 
+
+Some others:
+- the multinomial distribution (useful for a response variable that is a categorical variable with more than two levels)
+- inverse Gaussian distribution (e.g. for lifetime distributions; these can be used for failure time of machines in production processes or lifetime of a product). 
+
+**Key point**: all the distributions we have used so far can be written in a general formulation!
+
+$$f(y;\theta,\phi) = e^{\frac{y \cdot \theta - b(\theta)}{a(\phi)} + c(y,\theta)}$$
+
+- For example, if we use $\theta = log(\mu)$, $\phi = 1$, $a(\phi) = 1$, $b(\theta) = e^\theta$, $c(y, \phi) = –log(y!)$, we get the Poisson distribution function
+- This means that one set of equations can be used for all these distributions!
+
+- Then use first and second order derivatives to get mean and variance:
+
+$$E(Y)=b'(\theta)$$
+
+$$var(Y)=b''(\theta) \cdot a(\phi)$$
+
+- The term $a(\phi)$ determines the dispersion
+
+# Which Distribution to Select?
+
+- Choice should be made a priori based on the available knowledge on the response variable. For example, if you model the presence and absence of animals at M sites as a function of a couple of covariates, then your choice is simple: the **binomial distribution** should be used because your response variable contains zeros and ones. This is probably the only scenario where the choice is so obvious. 
+- If your data are counts (of animals, plants, etc.) without an upper limit, then the **Poisson distribution** is an option. This is because counts are always non-negative, and tend to be heterogeneous and both comply with the Poisson distribution. If there is high overdispersion, then the **negative binomial distribution** is an alternative to the Poisson for count data.
+- You can also use the **Normal distribution** for counts (potentially combined with a data transformation), but the **Poisson or negative binomial** may be more appropriate. However, the **Normal distribution** does not exclude negative realisations
+- You can also have counts with an upper limit. For example, if you count the number of animals on a farm that are infected with a disease, out of a total of N animals. The maximum number of infected animals is then N. If you consider each individual animal as an independent trial and each animal has the same probability of being infected, then we are in the world of a **binomial distribution**
+
+But, what do you do with densities?
+
+- Density is often defined as the numbers (which are counts!) per volume (or area, depth range, etc.). We will see in Chapter 9 that this can be modelled with the **Poisson (or NB) distribution** and an offset variable.
+
+- If the response variable is a continuous variable like weight of the animal, then the **Normal distribution** is your best option, but the **gamma distribution** may be an alternative choice.
+
+The important thing to realise is that these distributions are for the response variable, not for explanatory variables
+
+Distribution | Type of data | Mean – variance relationship
+--- | --- | ---
+Normal | Continuous | Equation (8.2)
+Poisson | Counts (integers) and density | Equation (8.4)
+Negative binomial | Overdispersed counts and density | Equation (8.7)
+Geometric | Overdispersed counts and density | Equation (8.8)
+Gamma | Continuous | Equation (8.10)
+Binomial | Proportional data | Equation (8.12)
+Bernoulli | Presence absence data | Equation (8.12) with N=1
+
+# Zero Truncated Distributions for Count Data
+
+$$f(y;\mu) = \frac{\mu^y {e^{ - \mu }}}{{y!}}$$
+
+The probability that yi = 0, is given by
+
+$$f(0;\mu) = \frac{\mu^0 {e^{ - \mu }}}{{0!}} = e^{ - \mu }$$
+
+The probability of not measuring a 0 is given by $1 – e^{ - \mu }$. If we use $\mu = 2$, then the probability that $y_i = 0$, is 0.135 and the probability of not measuring a 0 is 0.864
+
+```{r}
+
+x1 <- 0:10; Y1 <- dpois(x1, lambda = 2)
+x2 <- 0:10; Y2 <- dpois(x2, lambda = 2)
+x3 <- 0:10; Y3 <- dpois(x3, lambda = 2)/0.864
+Y3[1] <- 0
+XLab <- "Y values"; YLab <- "Probabilities" 
+op <- par(mfrow = c(2, 2))
+plot(x1, Y1, type = "h", xlab = XLab, ylab = YLab, main = "Poisson with mean 2")
+points(x1, Y1)
+plot(x2, Y2, type = "h", xlab = XLab, ylab = YLab, main = "Poisson with mean 2")
+points(x1, Y2)
+text(0, 0.1, "X")
+plot(x3, Y3, type = "h", xlab = XLab, ylab = YLab, main = "Poisson with mean 2")
+points(x1, Y3)
+par(op)
+
+
+```
+
+---
+
+
