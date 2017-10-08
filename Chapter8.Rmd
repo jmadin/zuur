@@ -190,6 +190,7 @@ $$E(Y)=\mu$$
 $$var(Y)=\frac{\mu^2}{\nu}$$
 - The dispersion is determined by v–1; a small value of v (relative to μ2) implies that the spread in the data is large
 
+**BELOW FIGURE IS WRONG! I CAN'T WORK OUT FROM THEIR FIGURE LEGEND HOW THEY USED DGAMMA**
 ```{r}
  mu1B=2 ; v1B=0.01
  mu1C=2 ; v1C=1
