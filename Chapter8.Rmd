@@ -179,7 +179,7 @@ $$var(Y)=\mu + \mu^2$$
 
 - Returning to the negative binomial probability function, note that for a small mean μ and large overdispersion (small k), the value of 0 has by far the highest probability.
 
-# The Gamme Distribution
+# The Gamma Distribution
 
 - The gamma distribution can be used for a continuous response variable Y that has positive values (Y > 0)
 - **Equation not shown**
