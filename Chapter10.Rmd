@@ -52,26 +52,28 @@ A second problem with the linear regression line in the plot above is that there
 A binomial GLM is specified with the same 3 steps as in chapter 9 for the Poisson and negative binomial GLMs:
 
 1. Assume a distribution for the response variable Y~i~.  In this case, Y~i~ is 1 if the boar has TB and 0 otherwise.
-2. Specify the systematic part, i.e. the fixed part, i.e. the part to the right of the tilde ~ in the formula.
-3. Choose a relationship ("link") between the mean value of Y~i~ and the systematic part.
+2. Specify the systematic part, i.e. the fixed part here, i.e. the part to the right of the tilde (~) in the formula.
+3. Choose a function relating ("link")  the mean value of Y~i~ and the systematic part.
 
 In more detail:
 
-1. For the presence/absence of TB in boars, assume Y~i~ is binomial distributed with probability $\pi$~i~ and n~i~=1 trials (equivalent to Bernoulli($\pi$~i~)).
+1. For the presence/absence of TB in boars, assume Y~i~ is binomial distributed with probability $\pi$~i~ and n~i~=1 trials (equivalent to Bernoulli($\pi$~i~) ).
 2. We're using length as the only predictor, so the systematic part of the model is $\eta$(LengthCT~i~) = $\alpha$ + $\beta$ * LengthCT~i~.
 3. We need a function that maps values of $\eta$ to between 0 and 1.  The most commonly used one, and the default, is the logit link (other options include probit link, clog-log link, and log-log link).
 
 The logit link:
 Define odds as O~i~ = $\pi$~i~ / (1 - $\pi$~i~)
-Odds are commonly used in betting; for example, if the odds that a horse will win a race are 9 to 1, that means in 10 races, you expect the horse will win 9 times and lose once.  Alternately, the probability the horse will win is 9 / 10; this is the same thing as saying the odds are 9.  The advantage of using odds is that there's no upper bound; they range from 0 to infinity.
 
-Now about that lower bound, which should be negative infinity, rather than 0: if we take the natural log of the odds, the result will range across the entire number line.  Examples of different probabilities, odds, and log odds are given in the table below.
+Odds are commonly used in betting; for example, if the odds that a horse will win a race are 9 to 1, that means in 10 races, you expect the horse will win 9 times and lose once.  Alternately, the probability the horse will win is 9/10 or 0.9; this is the same thing as saying the odds are 9.  The advantage of using odds is that there's no upper bound; they range from 0 to infinity.
+
+Now about that lower bound, which should be negative infinity rather than 0 (because a fitted line will ultimately go to negative infinity): if we take the natural log of the odds, the result will range across the entire number line.  Examples of different probabilities, odds, and log odds are given in the table below.
 
 ![](figures/Ch10Table10.1.png)
 
 So what we'll do in a logistic regression, instead of modelling the 0/1 outcome as a linear function of the predictor variables, is model the log odds as a linear function of the predictors:
 
-log(O~i~) = $\eta$(LengthCT)
+log(O~i~) = $\eta$(LengthCT) = $\alpha$ + $\beta$ * LengthCT~i~
+
 or we can write logit($\pi$~i~) instead of log(O~i~).  
 
 So the binomial GLM for the TB data is
@@ -93,11 +95,11 @@ B1=glm(Tb ~LengthCT, family = binomial, data = Boar)
 summary(B1)
 ```
 
-The estimated slope and intercept are -3.89 and 0.03 and are both significant at the 0.05 level.  So the probability that a boar of LengthCT~i~ is infected is
+The estimated intercept and slope are -3.89 and 0.03 and are both significant at the 0.05 level.  So the probability that a boar of LengthCT~i~ is infected is
 
 >$\pi$~i~ = exp(-3.89 + 0.03 * LengthCT~i~) / (1 + exp(-3.89 + 0.03 * LengthCT~i~))
 
-To see the relationship between LengthCT~i~ and $\pi$~i~, we can fill in values for the length and manually calculate $\pi$~i~ or use the predict command below.  We predict probabilities for lengths ranging from 46.5 to 165 cm, because those are the range of values observed in the animals.  The dots in the plot are the TB status of the observed animals.
+To see the relationship between LengthCT~i~ and $\pi$~i~, we can fill in values for the length and manually calculate $\pi$~i~ or use the predict() command below.  We predict probabilities for lengths ranging from 46.5 to 165 cm, because those are the range of values observed in the animals.  The dots in the plot are the TB status of the observed animals.
 
 ```{r}
 MyData <- data.frame(LengthCT = seq(from = 46.5, to = 165, by = 1))
@@ -109,7 +111,7 @@ lines(MyData$LengthCT,Pred)
 The fitted line shows a sigmoid curve, and the fitted values for the probability of having TB are always between 0 and 1.  The probability of observing a boar with TB is low for small animals, increases more rapidly from length about 70-80 cm up to about 140cm, and then increases more slowly for larger animals.
 
 Plotting residuals etc. is very different for logistic regression than for linear, and harder to interpret.  Previously we've always said "there should be no pattern in the residuals", but there are going to be bands in these residuals - the observed data is 1s and 0s and the predictions are probabilities.  If the data set is large, Zuur et al. say "It may be an option to extract the residuals, group them into sets of, say, 10, calculate the average of the residuals per group, and use the averages in graphical validation plots.  The groups can be based on the order of the fitted values, or on the order of a covariate."
-But drop1 indicates our one predictor variable is important.
+But drop1() indicates our one predictor variable is important.
 
 ```{r}
 par(mfrow=c(2,2))
@@ -138,7 +140,7 @@ legend("topleft",legend=c("logit","probit","clog-log"),bty="n",
        lty=c(1,2,3), col=c(1,2,4),cex=0.8,lwd=2)
 ```
 
-The logit and probit link functions assume the data has a roughly equal number of 0s and 1s.  The clog-log link produces an asymmetric sigmoidal curve, so can be useful if there are many more 1s than 0s, or vice versa.  Zuur et al. suggest and tools based on AIC, BIC, and deviance.
+The logit and probit link functions assume the data has a roughly equal number of 0s and 1s.  The clog-log link produces an asymmetric sigmoidal curve, so can be useful if there are many more 1s than 0s, or vice versa.  Zuur et al. suggest Hardin and Hilbe (2007) for examples comparing different link functions and tools based on AIC, BIC, and deviance.
 
 ### Example 2: parasites in cod
 
@@ -156,7 +158,7 @@ Model chosen:
 
 >logit($\pi$~i~) = Year~i~ + Area~i~ + Year~i~ x Area~i~ + Length~i~
 
-Year~i~ and Area~i~ are factors with 3 levels each.
+Year~i~ and Area~i~ are factors with several levels each.
 
 The code to fit the model:
 
@@ -179,13 +181,13 @@ drop1(P1, test="Chi")
 
 The summary output above shows which levels of a factor are different from the baseline level (and for interactions, which combinations are different from the baseline, which is Area 1 x Year 1999).  If you want to compare all the area-year combinations to see which pairs are different, you can set the baseline to different combinations and use post-hoc tests (carefully).
 
-Zuur et al. note: an easy make to make in doing model selection for this data set is because there were missing values. If a predictor that had some missing values is removed from the model, the new data set may have more observations, and therefore the AICs will not be comparable.  This is also true for analysis of deviance tables.  Drop1() will do the comparison appropriately by removing observations with NAs, but that only works for one round of model comparisons.  Zuur et al. suggest that it's therefore better to remove data with missing values before doing model selection in such a case.
+Zuur et al. note: an easy error to make in doing model selection for this data set can happen because there were missing values. If a predictor that had some missing values is removed from the model, the new data set may have more observations, and therefore the AICs will not be comparable.  This is also true for analysis of deviance tables.  Drop1() will do the comparison appropriately by removing observations with NAs, but that only works for one round of model comparisons.  Zuur et al. suggest that it's therefore better to remove data with missing values before doing model selection in such a case.
 
 ### GLM for proportional data
 
 In the examples of boars with or without TB (1/0) and cod with or without parasites (1/0), the response variable Y~i~ was binary with Bernoulli distribution B(1, $\pi$~i~).
 
-In the next example, Vicente et al. (2006) analyzed data from estates~i~ on each of which n~i~ deer were sampled.  Each deer did or didn't have a parasite, and the response variable Y~i~ is the proportion of deer with parasites out of n~i~ animals.  
+In the next example, Vicente et al. (2006) analyzed data from estates~i~ on each of which n~i~ deer were sampled.  Each deer did or didn't have a parasite, and the response variable Y~i~ is the proportion of deer with parasites out of n~i~ animals on the ~i~th estate.  
 
 Predictor variables are the percent of open land, scrub land, number of Quercus plants per area, number of Quercus trees per area, a red deer abundance index, the estate size, and whether or not the estate is fenced.
 
@@ -261,7 +263,7 @@ lines(MyData$OpenLand,exp(P1$fit-1.96*P1$se.fit)/
 points(Tbdeer$OpenLand,Tbdeer$DeerPosProp)
 ```
 
-It's important to know that the predict() function produces outputs on the scale of the predictor function $\eta$, and therefore the fitted values and the confidence bands need to be transformed to a probability scale with the logistic link function.  (And the confidence bands will now be between 0 and 1, unlike on the logit scale.)
+It's important to know that the predict() function produces outputs on the scale of the predictor function $\eta$, and therefore the fitted values and the confidence bands need to be transformed to a probability scale with the logistic link function.  (And the confidence bands will now be between 0 and 1, unlike on the logit scale.)  You may be able to use type="response" to get the predictions on the scale of the response variable (i.e. predictions as probabilities, in the case of binomial GLMs) instead of on the link function scale, but the code above spells out how to convert the predictions to probabilities if you need to.
 
 The model validation process for a binomial GLM is the same as for a Poisson GLM as in chapter 9: plot the Pearson or deviance residuals against the fitted values and plot the residuals against each predictor variable in the model (as well as against the predictors that were dropped).
 
